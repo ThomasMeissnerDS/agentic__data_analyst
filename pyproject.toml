@@ -1,0 +1,28 @@
+[project]
+name = "ai_analyst"
+version = "0.1.0"
+description = "A data analysis project using multiple LLMs"
+authors = [
+    {name = "Your Name", email = "meissnercorporation@gmx.de"}
+]
+
+[tool.poetry.dependencies]
+"accelerate>=1.6.0",
+"bitsandbytes>=0.45.5",
+"fpdf>=1.7.2",
+"genai>=2.1.0"
+"matplotlib>=3.0.0",
+"numpy>=2.2.4"
+"pandas>=2.0.0",
+"scipy>=1.15.2",
+"seaborn>=0.13.2",
+# "torch>=2.7.0", # directly follow their instructions for GPU support
+"transformers>=4.51.3"
+
+
+[build-system]
+requires = [
+    "poetry-core>=1.0.0", 
+    "poetry-dynamic-versioning",
+    ]
+
