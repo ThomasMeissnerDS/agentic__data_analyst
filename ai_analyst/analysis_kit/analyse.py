@@ -58,9 +58,10 @@ def analyse_data(
         sleep_secs=config.sleep_seconds,
         data_about=config.data_about,
         tmp_dir=config.tmp_dir,
-        pdf_path=config.pdf_path
+        pdf_path=config.pdf_path,
+        config=config
     )
     print("FINAL ANALYST ANSWER ===")
     print(final_text)
     print(f"PDF conversation saved at {config.pdf_path}")
-    return client.chats.create(model=config.model_path).send_message(data)
+    return client.chats.create(model=config.model_path).send_message(data, config=config)

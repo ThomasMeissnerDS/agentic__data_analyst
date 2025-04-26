@@ -1,4 +1,4 @@
-from ai_analyst.classes import _DummyClient
+from ai_analyst.classes.dummy_client import _DummyClient
 from ai_analyst.general_utils.image_utils import _decode_plot_if_any
 from ai_analyst.general_utils.pdf_utils import save_conversation_to_pdf
 from ai_analyst.general_utils.text_utils import extract_text_and_code, summarize_conversation, strip_string_quotes
@@ -54,35 +54,12 @@ def gemma3_session(config: AnalysisConfig):
         gc.collect()
 
 
-def analyst_inference(messages, *, config: AnalysisConfig) -> str:
-    """One assistant turn given `messages` (Open‑AI style list of dicts).
-    
-    Args:
-        messages: List of message dictionaries
-        config (AnalysisConfig): Configuration object containing model settings
-    """
-    with gemma3_session(config) as (model, tokenizer):
-        inputs = tokenizer.apply_chat_template(
-            messages, return_tensors="pt"
-        ).to(model.device)
-
-        prompt_len = inputs.shape[1]
-        with torch.no_grad():
-            out = model.generate(
-                inputs,
-                max_new_tokens=config.max_tokens_gen,
-                eos_token_id=tokenizer.eos_token_id,
-            )
-        reply = tokenizer.decode(out[0][prompt_len:], skip_special_tokens=True)
-        return reply.strip()
-    
-
-
 def decide_if_continue_or_not(
         latest_text: str, 
         client: _DummyClient, 
         model_id: str, 
-        data_about: str):
+        data_about: str,
+        config: AnalysisConfig = None):
     decider_chat = client.chats.create(model=model_id)
     decider_prompt = (
         "You are the DECIDER LLM. Analyse the following Analyst‑LLM output:\n\n"
@@ -90,7 +67,7 @@ def decide_if_continue_or_not(
         "Should the Analyst continue? Reply \"no\" if we are finished, otherwise say anything else.\n\n"
         f"(Remember: data already loaded as df about {data_about} with columns {list(df.columns)})"
     )
-    decider_reply = decider_chat.send_message(decider_prompt).text.strip()
+    decider_reply = decider_chat.send_message(decider_prompt, config=config).text.strip()
     return decider_reply.lower() != "no", decider_reply
 
 
@@ -135,11 +112,12 @@ def chat_with_tools(
         data_about: str = "",
         tmp_dir: str = "/kaggle/working/_plots",
         pdf_path: str = "/kaggle/working/report.pdf",
+        config: AnalysisConfig = None,
         ) -> str:
     conversation_log = []
     chat = client.chats.create(model=model_id)
 
-    response = chat.send_message(user_message)
+    response = chat.send_message(user_message, config=config)
     model_text = response.text
     final_answer, iterations = "", 0
 
@@ -157,7 +135,8 @@ def chat_with_tools(
             latest_text=model_text,
             client=client,
             model_id=model_id,
-            data_about=data_about
+            data_about=data_about,
+            config=config
         )
         conversation_log.append(("DECIDER", decider_txt))
         if not cont or iterations >= 5:
@@ -167,7 +146,7 @@ def chat_with_tools(
 
         _, summary = summarize_conversation(conversation_log)
         next_msg = f"Conversation so far (summary):\n{summary}\n\nContinue."
-        model_text = chat.send_message(next_msg).text
+        model_text = chat.send_message(next_msg, config=config).text
 
     save_conversation_to_pdf(conversation_log, pdf_path)
     return strip_string_quotes(final_answer.strip())
