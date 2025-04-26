@@ -2,7 +2,7 @@ from ai_analyst.classes import _DummyClient
 from ai_analyst.general_utils.image_utils import _decode_plot_if_any
 from ai_analyst.general_utils.pdf_utils import save_conversation_to_pdf
 from ai_analyst.general_utils.text_utils import extract_text_and_code, summarize_conversation, strip_string_quotes
-from ai_analyst.analysis_kit.analyse import AnalysisConfig
+from ai_analyst.analysis_kit.config import AnalysisConfig
 from contextlib import contextmanager, redirect_stdout
 import io
 import pandas as pd
