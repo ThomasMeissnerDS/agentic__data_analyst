@@ -1,3 +1,5 @@
+from ai_analyst.general_utils.text_utils import _txt
+
 class _LLMResponse:
     def __init__(self, text: str):
         self.text = text
