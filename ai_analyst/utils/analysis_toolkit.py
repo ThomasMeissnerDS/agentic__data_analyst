@@ -32,7 +32,7 @@ def groupby_aggregate(groupby_col: str, agg_col: str, agg_func: str):
     ax.set_title(f'{agg_func.title()} of {agg_col} by {groupby_col}')
     ax.set_xlabel(groupby_col)
     ax.set_ylabel(f'{agg_func.title()} of {agg_col}')
-    plt.xticks(rotation=45)
+    plt.xticks(rotation=90)
     plt.tight_layout()
     
     # Convert to base64
@@ -58,9 +58,13 @@ def filter_data(col: str, op: str, value):
 
 def boxplot_all_columns():
     global df
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(figsize=(12, 6))
     df.boxplot(ax=ax)
-    buf = io.BytesIO(); fig.savefig(buf, format="png"); buf.seek(0)
+    plt.xticks(rotation=90)
+    plt.tight_layout()
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png")
+    buf.seek(0)
     plt.close(fig)
     return base64.b64encode(buf.read()).decode()
 

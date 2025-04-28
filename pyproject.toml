@@ -1,14 +1,13 @@
 [tool.poetry]
 name = "ai_analyst"
-version = "0.1.0"
+version = "0.2.0"
 description = "A data analysis project using multiple LLMs"
 authors = ["Thomas Meißner <meissnercorporation@gmx.de>"]
 license = "GPL-3.0-only"
 classifiers = [
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
+    "Programming Language :: 3.12",
 ]
 homepage = "https://github.com/ThomasMeissnerDS/BlueCast"
 readme = "README.md"
@@ -17,7 +16,7 @@ packages = [
 ]
 
 [tool.poetry.dependencies]
-python = ">=3.9,<3.13"  # lower not possible: https://github.com/python-poetry/poetry/issues/5628
+python = ">=3.10,<3.13"  # Updated to match scipy requirements
 accelerate = ">=1.6.0"
 bitsandbytes = ">=0.45.5"
 fpdf = ">=1.7.2"

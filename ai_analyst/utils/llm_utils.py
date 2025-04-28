@@ -135,6 +135,18 @@ def chat_with_tools(
     conversation_log = []
     chat = client.chats.create(model=model_id)
 
+    # Add instruction for interpretation to the initial prompt
+    user_message += """
+    
+    IMPORTANT: After each tool call, you MUST provide a clear interpretation of the results. For example:
+    - For correlation_matrix(): Explain the strongest correlations and any interesting patterns
+    - For boxplot_all_columns(): Describe the distribution characteristics and any outliers
+    - For scatter_matrix_all_numeric(): Point out any notable relationships between variables
+    - For line_plot_over_time(): Explain trends, seasonality, or other temporal patterns
+    
+    Your analysis should be data-driven and focus on actionable insights.
+    """
+
     response = chat.send_message(user_message, config=config)
     model_text = response.text
     final_answer, iterations = "", 0
@@ -146,6 +158,11 @@ def chat_with_tools(
             conversation_log.append(("LLM", pre)); final_answer += pre + "\n"
         if code_block:
             tool_out = run_tool_code(code_block, conversation_log, tmp_dir)
+            # Add a reminder for interpretation if the tool output is a visualization
+            if "base64" in tool_out:
+                next_msg = f"Tool output:\n{tool_out}\n\nPlease provide a detailed interpretation of these results. Focus on key insights and patterns."
+                model_text = chat.send_message(next_msg, config=config).text
+                continue
         if post:
             conversation_log.append(("LLM", post)); final_answer += post + "\n"
 
@@ -164,7 +181,7 @@ def chat_with_tools(
         time.sleep(sleep_secs)
 
         _, summary = summarize_conversation(conversation_log)
-        next_msg = f"Conversation so far (summary):\n{summary}\n\nContinue."
+        next_msg = f"Conversation so far (summary):\n{summary}\n\nContinue with your analysis, making sure to interpret any visualizations or statistical results."
         model_text = chat.send_message(next_msg, config=config).text
 
     save_conversation_to_pdf(conversation_log, pdf_path)
