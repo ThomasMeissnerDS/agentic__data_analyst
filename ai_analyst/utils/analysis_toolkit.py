@@ -22,7 +22,25 @@ def groupby_aggregate(groupby_col: str, agg_col: str, agg_func: str):
     valid = {"mean", "sum", "min", "max", "count", "median", "std", "var"}
     if agg_func not in valid:
         raise ValueError("Unsupported agg_func")
-    return df.groupby(groupby_col)[agg_col].agg(agg_func).to_dict()
+    
+    # Calculate the aggregation
+    result = df.groupby(groupby_col)[agg_col].agg(agg_func)
+    
+    # Create the visualization
+    fig, ax = plt.subplots(figsize=(10, 6))
+    result.plot(kind='bar', ax=ax)
+    ax.set_title(f'{agg_func.title()} of {agg_col} by {groupby_col}')
+    ax.set_xlabel(groupby_col)
+    ax.set_ylabel(f'{agg_func.title()} of {agg_col}')
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+    
+    # Convert to base64
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png")
+    buf.seek(0)
+    plt.close(fig)
+    return base64.b64encode(buf.read()).decode()
 
 def groupby_aggregate_multi(groupby_cols: list, agg_dict: dict):
     global df
@@ -36,7 +54,7 @@ def filter_data(col: str, op: str, value):
     }
     if op not in ops:
         raise ValueError("Bad operator")
-    return df[ops[op]].to_dict(orient="list")
+    return len(df[ops[op]].index)
 
 def boxplot_all_columns():
     global df
@@ -46,9 +64,19 @@ def boxplot_all_columns():
     plt.close(fig)
     return base64.b64encode(buf.read()).decode()
 
-def correlation_matrix():               return df.corr().to_dict()
+def correlation_matrix():               
+    global df
+    fig, ax = plt.subplots(figsize=(10, 8))
+    sns.heatmap(df.corr(), annot=True, cmap='coolwarm', center=0, ax=ax)
+    plt.tight_layout()
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png")
+    buf.seek(0)
+    plt.close(fig)
+    return base64.b64encode(buf.read()).decode()
 
 def scatter_matrix_all_numeric():
+    global df
     fig = sns.pairplot(df.select_dtypes(include=["int", "float"]))
     buf = io.BytesIO(); fig.fig.savefig(buf, format="png"); buf.seek(0)
     plt.close("all")
@@ -62,8 +90,7 @@ def line_plot_over_time(date_col: str, val_col: str, agg_func="mean", freq="D"):
     resampled = temp[val_col].resample(freq).agg(agg_func)
     fig, ax = plt.subplots(); ax.plot(resampled.index, resampled.values)
     ax.set_title(f"{agg_func} of {val_col} by {freq}"); ax.set_xlabel(date_col); ax.set_ylabel(val_col)
-    buf = io.BytesIO(); fig.savefi
-    g(buf, format="png"); buf.seek(0)
+    buf = io.BytesIO(); fig.savefig(buf, format="png"); buf.seek(0)
     plt.close(fig)
     return base64.b64encode(buf.read()).decode()
 

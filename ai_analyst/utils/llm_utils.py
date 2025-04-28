@@ -11,6 +11,21 @@ import gc
 import time
 from accelerate import Accelerator
 from transformers import AutoTokenizer, AutoProcessor, BitsAndBytesConfig, Gemma3ForConditionalGeneration
+from ai_analyst.utils.analysis_toolkit import (
+    correlation,
+    describe_df,
+    groupby_aggregate,
+    groupby_aggregate_multi,
+    filter_data,
+    boxplot_all_columns,
+    correlation_matrix,
+    scatter_matrix_all_numeric,
+    line_plot_over_time,
+    outlier_rows
+)
+
+# Global cache for tool execution results
+executed_calls_cache = {}
 
 @contextmanager
 def gemma3_session(config: AnalysisConfig):
@@ -59,6 +74,7 @@ def decide_if_continue_or_not(
         client: _DummyClient, 
         model_id: str, 
         data_about: str,
+        df: pd.DataFrame,
         config: AnalysisConfig = None):
     decider_chat = client.chats.create(model=model_id)
     decider_prompt = (
@@ -72,6 +88,7 @@ def decide_if_continue_or_not(
 
 
 def run_tool_code(code_str: str, conversation_log: list, tmp_dir: str):
+    """Execute tool code and return its output."""
     global executed_calls_cache
     conversation_log.append(("TOOL_CODE", f"```tool_code\n{code_str}\n```"))
 
@@ -113,6 +130,7 @@ def chat_with_tools(
         tmp_dir: str = "/kaggle/working/_plots",
         pdf_path: str = "/kaggle/working/report.pdf",
         config: AnalysisConfig = None,
+        df: pd.DataFrame = None,
         ) -> str:
     conversation_log = []
     chat = client.chats.create(model=model_id)
@@ -136,6 +154,7 @@ def chat_with_tools(
             client=client,
             model_id=model_id,
             data_about=data_about,
+            df=df,
             config=config
         )
         conversation_log.append(("DECIDER", decider_txt))

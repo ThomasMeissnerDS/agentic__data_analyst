@@ -1,5 +1,6 @@
 from fpdf import FPDF
 from ai_analyst.general_utils.file_utils import copy_files
+import os
 
 
 def save_conversation_to_pdf(
@@ -30,14 +31,25 @@ def save_conversation_to_pdf(
     
     for kind, content in conversation_log:
         if kind == "TOOL_IMG":
-            # Add a subtle border around images
-            pdf.set_draw_color(200, 200, 200)
-            pdf.rect(pdf.get_x(), pdf.get_y(), 180, 120)
-            pdf.image(content, w=180)
+            # Add a section header for visualizations
+            pdf.set_font("DejaVu", "B", 12)
+            pdf.cell(0, 10, "Visualization", ln=True)
             pdf.ln(5)
-            continue
             
-        if kind == "LLM":
+            # Add the image with a border
+            pdf.set_draw_color(100, 100, 100)  # Darker border for images
+            pdf.rect(pdf.get_x(), pdf.get_y(), 180, 120)
+            
+            # Check if the image file exists
+            if os.path.exists(content):
+                pdf.image(content, w=180)
+            else:
+                pdf.set_font("DejaVu", "I", 10)
+                pdf.multi_cell(0, 5, f"Image not found: {content}")
+            
+            pdf.ln(10)  # Extra space after images
+            
+        elif kind == "LLM":
             # Format LLM responses with indentation and proper spacing
             pdf.set_font("DejaVu", "", 11)
             pdf.multi_cell(0, 5, content)
