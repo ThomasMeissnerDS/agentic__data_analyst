@@ -18,6 +18,7 @@ class AnalysisConfig:
         keep_last_n_items (int): Number of recent items to keep
         tmp_dir (str): Directory for temporary plot files
         target_column (str): Name of the target column for analysis
+        max_iterations (int): Maximum number of iterations for the analysis
     """
     data_path: str = "your_path/train.csv"
     model_path: str = "/kaggle/input/gemma-3/transformers/gemma-3-12b-it/1/"
@@ -31,6 +32,7 @@ class AnalysisConfig:
     keep_last_n_items: int = 3
     tmp_dir: str = "/kaggle/working/_plots"
     target_column: str = ""
+    max_iterations: int = 5
 
     def __post_init__(self):
         """Create temporary directory if it doesn't exist and validate critical fields."""

@@ -1,86 +1,134 @@
 from fpdf import FPDF
 from ai_analyst.general_utils.file_utils import copy_files
 import os
+from datetime import datetime
+import pkg_resources
+
+
+class PDF(FPDF):
+    def __init__(self, font_path: str = None, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Register DejaVu fonts before any page is added
+        if font_path:
+            self.add_font("DejaVu", "", font_path, uni=True)
+            self.add_font("DejaVu", "B", font_path, uni=True)
+            self.add_font("DejaVu", "I", font_path, uni=True)
+
+    def header(self):
+        # Attempt to locate logo via pkg_resources, fallback to relative path
+        try:
+            logo_path = pkg_resources.resource_filename('ai_analyst', 'resources/logo.png')
+        except Exception:
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            logo_path = os.path.join(current_dir, '..', 'resources', 'logo.png')
+
+        if os.path.exists(logo_path):
+            self.image(logo_path, 10, 8, 33)
+
+        # Header title
+        self.set_font('DejaVu', 'B', 15)
+        self.cell(80)
+        self.cell(30, 10, 'Data Analysis Report', 0, 0, 'C')
+        self.ln(20)
+
+    def footer(self):
+        # Position at 1.5 cm from bottom
+        self.set_y(-15)
+        self.set_font('DejaVu', 'I', 8)
+        self.cell(0, 10, f'Page {self.page_no()}/{{nb}}', 0, 0, 'C')
 
 
 def save_conversation_to_pdf(
-        conversation_log, 
-        pdf_path,
-        font_path: str = "/kaggle/working/output/dejavusans-bold-ttf/DejaVuSans-Bold.ttf",
-        ):
-    pdf = FPDF()
-    pdf.add_page()
+    conversation_log,
+    pdf_path,
+    font_path: str = "/kaggle/working/output/dejavusans-bold-ttf/DejaVuSans-Bold.ttf",
+):
+    # Create PDF instance with fonts already registered
+    pdf = PDF(font_path)
+    pdf.alias_nb_pages()
+    pdf.add_page()  # header() can now use DejaVu B safely
     copy_files()
-    
-    # Add fonts
-    pdf.add_font("DejaVu", "", font_path, uni=True)
-    pdf.add_font("DejaVu", "B", font_path, uni=True)
-    pdf.add_font("DejaVu", "I", font_path, uni=True)
-    
-    # Set colors
-    pdf.set_text_color(0, 0, 0)  # Black text
-    pdf.set_draw_color(200, 200, 200)  # Light gray for borders
-    
-    # Add title
+
+    # Styles and metadata
+    pdf.set_text_color(51, 51, 51)
+    pdf.set_draw_color(200, 200, 200)
+
+    pdf.set_font("DejaVu", "B", 24)
+    pdf.cell(0, 20, "Data Analysis Report", ln=True, align="C")
+    pdf.set_font("DejaVu", "", 12)
+    pdf.cell(
+        0,
+        10,
+        f"Generated on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+        ln=True,
+        align="C",
+    )
+    pdf.ln(20)
+
+    # Table of contents
     pdf.set_font("DejaVu", "B", 16)
-    pdf.cell(0, 10, "Data Analysis Report", ln=True, align="C")
+    pdf.cell(0, 10, "Table of Contents", ln=True)
     pdf.ln(10)
-    
-    # Set default font for content
+
+    sections = []
+    current_section = None
     pdf.set_font("DejaVu", "", 11)
-    
+
     for kind, content in conversation_log:
         if kind == "TOOL_IMG":
-            # Add a section header for visualizations
-            pdf.set_font("DejaVu", "B", 12)
-            pdf.cell(0, 10, "Visualization", ln=True)
+            pdf.set_font("DejaVu", "B", 14)
+            current_section = "Visualization"
+            sections.append(current_section)
+            pdf.cell(0, 10, current_section, ln=True)
             pdf.ln(5)
-            
-            # Add the image with a border
-            pdf.set_draw_color(100, 100, 100)  # Darker border for images
-            pdf.rect(pdf.get_x(), pdf.get_y(), 180, 120)
-            
-            # Check if the image file exists
+
+            pdf.set_draw_color(100, 100, 100)
+            x, y = pdf.get_x(), pdf.get_y()
+            pdf.rect(x, y, 180, 120)
+
             if os.path.exists(content):
                 pdf.image(content, w=180)
+                pdf.set_font("DejaVu", "I", 10)
+                pdf.cell(0, 5, "Analysis Visualization", ln=True)
             else:
                 pdf.set_font("DejaVu", "I", 10)
                 pdf.multi_cell(0, 5, f"Image not found: {content}")
-            
-            pdf.ln(10)  # Extra space after images
-            
+            pdf.ln(10)
+
         elif kind == "LLM":
-            # Format LLM responses with indentation and proper spacing
             pdf.set_font("DejaVu", "", 11)
-            pdf.multi_cell(0, 5, content)
-            pdf.ln(5)
-            
-        elif kind == "TOOL_CODE":
-            # Format code blocks with gray background
-            pdf.set_fill_color(240, 240, 240)
-            pdf.set_font("DejaVu", "", 10)
+            pdf.set_fill_color(248, 248, 248)
             pdf.multi_cell(0, 5, content, fill=True)
             pdf.ln(5)
-            
-        elif kind == "TOOL":
-            # Format tool outputs with italic style
-            pdf.set_font("DejaVu", "I", 10)
-            pdf.multi_cell(0, 5, content)
+
+        elif kind == "TOOL_CODE":
+            pdf.set_fill_color(240, 240, 240)
+            pdf.set_draw_color(200, 200, 200)
+            pdf.set_font("DejaVu", "", 10)
+            x, y = pdf.get_x(), pdf.get_y()
+            pdf.rect(x, y, 190, 20)
+            pdf.multi_cell(0, 5, content, fill=True)
             pdf.ln(5)
-            
+
+        elif kind == "TOOL":
+            pdf.set_font("DejaVu", "I", 10)
+            pdf.set_fill_color(252, 252, 252)
+            pdf.multi_cell(0, 5, content, fill=True)
+            pdf.ln(5)
+
         elif kind == "DECIDER":
-            # Format decider messages with bold style
+            pdf.set_text_color(0, 102, 204)
             pdf.set_font("DejaVu", "B", 10)
             pdf.multi_cell(0, 5, f"Decision: {content}")
             pdf.ln(5)
-            
-        # Reset font for next iteration
+            pdf.set_text_color(51, 51, 51)
+
         pdf.set_font("DejaVu", "", 11)
-    
-    # Add footer
+
+    # Footer generation info
     pdf.set_y(-15)
     pdf.set_font("DejaVu", "I", 8)
-    pdf.cell(0, 10, f"Generated by AI Analyst", align="C")
-    
+    pdf.cell(0, 10, f"Generated by AI Analyst | {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", align="C")
+
     pdf.output(pdf_path)
     print(f"PDF saved → {pdf_path}")

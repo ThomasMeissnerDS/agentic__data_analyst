@@ -175,7 +175,7 @@ def chat_with_tools(
             config=config
         )
         conversation_log.append(("DECIDER", decider_txt))
-        if not cont or iterations >= 5:
+        if not cont or iterations >= config.max_iterations:
             break
         iterations += 1
         time.sleep(sleep_secs)
