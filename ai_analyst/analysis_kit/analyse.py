@@ -15,6 +15,62 @@ from ai_analyst.analysis_kit import (
     line_plot_over_time,
     outlier_rows
 )
+import os
+
+def _validate_pdf_requirements(config: AnalysisConfig) -> None:
+    """Validate all requirements for PDF generation.
+    
+    Args:
+        config (AnalysisConfig): Configuration object containing paths and settings
+        
+    Raises:
+        ImportError: If fpdf package is not installed
+        FileNotFoundError: If DejaVu font file is not found
+        PermissionError: If required directories are not writable
+    """
+    # Check if fpdf is installed
+    try:
+        import fpdf
+    except ImportError:
+        raise ImportError(
+            "The 'fpdf' package is required for PDF generation. "
+            "Please install it with: pip install fpdf"
+        )
+    
+    # Check if DejaVu font is available
+    font_path = "/kaggle/input/dejavusans-bold-ttf/DejaVuSans-Bold.ttf"
+    if not os.path.exists(font_path):
+        # Try to find it in the package resources
+        try:
+            import pkg_resources
+            font_path = pkg_resources.resource_filename('ai_analyst', 'resources/DejaVuSans-Bold.ttf')
+            if not os.path.exists(font_path):
+                raise FileNotFoundError
+        except (ImportError, FileNotFoundError):
+            raise FileNotFoundError(
+                "DejaVuSans-Bold.ttf font file is required for PDF generation. "
+                "Please ensure the font file is available in either: "
+                f"1. {font_path} or "
+                "2. ai_analyst/resources/DejaVuSans-Bold.ttf"
+            )
+    
+    # Check if output directory is writable
+    pdf_dir = os.path.dirname(config.pdf_path)
+    if pdf_dir:
+        os.makedirs(pdf_dir, exist_ok=True)
+        if not os.access(pdf_dir, os.W_OK):
+            raise PermissionError(
+                f"Cannot write to PDF output directory: {pdf_dir}. "
+                "Please ensure you have write permissions."
+            )
+    
+    # Check if temporary directory is writable
+    os.makedirs(config.tmp_dir, exist_ok=True)
+    if not os.access(config.tmp_dir, os.W_OK):
+        raise PermissionError(
+            f"Cannot write to temporary directory: {config.tmp_dir}. "
+            "Please ensure you have write permissions."
+        )
 
 # Default client and model
 client = _DummyClient()
@@ -36,6 +92,9 @@ def analyse_data(
     """
     if config is None:
         config = AnalysisConfig()
+    
+    # Validate PDF generation requirements
+    _validate_pdf_requirements(config)
     
     # Set the global DataFrame for the analysis functions
     import ai_analyst.utils.analysis_toolkit as toolkit

@@ -41,7 +41,7 @@ class PDF(FPDF):
 def save_conversation_to_pdf(
     conversation_log,
     pdf_path,
-    font_path: str = "/kaggle/working/output/dejavusans-bold-ttf/DejaVuSans-Bold.ttf",
+    font_path: str = "/kaggle/input/dejavusans-bold-ttf",
 ):
     # Create PDF instance with fonts already registered
     pdf = PDF(font_path)
