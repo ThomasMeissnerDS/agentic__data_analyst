@@ -102,8 +102,7 @@ def analyse_data(
         client = APIChat(config)
         model_id = config.api_model_id
     else:
-        from ai_analyst.classes import LocalChat
-        client = LocalChat(config)
+        client = _DummyClient()
         model_id = config.model_path
     
     # Set the global DataFrame for the analysis functions
