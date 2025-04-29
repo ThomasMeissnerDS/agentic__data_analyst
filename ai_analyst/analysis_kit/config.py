@@ -29,7 +29,7 @@ class AnalysisConfig:
         api_secret_label (str): Label for the API key in Kaggle secrets
     """
     data_path: str = "your_path/train.csv"
-    model_path: str = "/kaggle/input/gemma-3/transformers/gemma-3-12b-it/1/"
+    model_path: str = "/google/gemma-3-12b-it/"
     load_4bit: bool = True
     max_tokens_gen: int = 1024
     pdf_path: str = "/kaggle/working/report.pdf"
