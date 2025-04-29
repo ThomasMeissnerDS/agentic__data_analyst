@@ -5,6 +5,8 @@ import os
 from ai_analyst.analysis_kit.analyse import analyse_data, _validate_pdf_requirements
 from ai_analyst.analysis_kit.config import AnalysisConfig
 
+os.environ['TRANSFORMERS_OFFLINE'] = '1'  # not sure if needed
+
 
 if __name__ == "__main__":
     DATA_PATH = "/home/thomas/Downloads/train.csv"
@@ -13,7 +15,7 @@ if __name__ == "__main__":
 
     ai_cfg = AnalysisConfig(
         data_path=DATA_PATH,
-        model_path="/kaggle/input/gemma-3/transformers/gemma-3-12b-it/1/",  # default
+        model_path="google/gemma-3-12b-it",  # default
         data_about="This dataset contains information about rainfall",
         target_column=TARGET,
         pdf_path="/home/thomas/Downloads/report.pdf",
