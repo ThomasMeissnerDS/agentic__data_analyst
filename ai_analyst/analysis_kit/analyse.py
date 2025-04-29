@@ -13,7 +13,8 @@ from ai_analyst.analysis_kit import (
     correlation_matrix,
     scatter_matrix_all_numeric,
     line_plot_over_time,
-    outlier_rows
+    outlier_rows,
+    scatter_plot
 )
 import os
 
@@ -124,6 +125,9 @@ def analyse_data(
     7. scatter_matrix_all_numeric() - Creates scatter plots between all numeric columns
     8. line_plot_over_time("date_col", "value_col", agg_func="mean", freq="D") - Creates time series plot with aggregation
     9. outlier_rows("column_name", z_threshold=3.0) - Returns rows identified as outliers based on z-score
+    10. scatter_plot("x_column", "y_column", hue_col="optional_color_column") - Creates a scatter plot between two columns with optional color encoding
+
+    You cannot ask for additional functions. These are the only functions you can use.
 
     IMPORTANT: All column names must be provided as strings (in quotes). For example:
     - CORRECT: correlation("Rainfall", "Temperature")
