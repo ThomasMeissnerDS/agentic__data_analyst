@@ -7,7 +7,7 @@ license = "GPL-3.0-only"
 classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
-    "Programming Language :: 3.12",
+    "Programming Language :: Python :: 3.12",
 ]
 homepage = "https://github.com/ThomasMeissnerDS/BlueCast"
 readme = "README.md"
@@ -38,10 +38,4 @@ requires = [
     "poetry-dynamic-versioning",
     ]
 
-[tool.poetry-dynamic-versioning]
-enable = true
-vcs = "git"
-style = "semver"
-pattern = "(?P<base>\\d+\\.\\d+\\.\\d+)"
-format-jinja = "{% if distance == 0 %}{{base}}{% else %}{{base}}.post{{distance}}+git.{{commit}}{% endif %}"
 
