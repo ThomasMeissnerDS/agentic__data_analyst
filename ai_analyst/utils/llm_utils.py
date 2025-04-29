@@ -184,5 +184,5 @@ def chat_with_tools(
         next_msg = f"Conversation so far (summary):\n{summary}\n\nContinue with your analysis, making sure to interpret any visualizations or statistical results."
         model_text = chat.send_message(next_msg, config=config).text
 
-    save_conversation_to_pdf(conversation_log, pdf_path)
+    save_conversation_to_pdf(conversation_log, pdf_path, config)
     return strip_string_quotes(final_answer.strip())

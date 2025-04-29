@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "ai_analyst"
-version = "0.3.0"
+version = "0.3.2"
 description = "A data analysis project using multiple LLMs"
 authors = ["Thomas Meißner <meissnercorporation@gmx.de>"]
 license = "GPL-3.0-only"

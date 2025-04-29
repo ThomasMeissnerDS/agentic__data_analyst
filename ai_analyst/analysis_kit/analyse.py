@@ -25,7 +25,7 @@ def _validate_pdf_requirements(config: AnalysisConfig) -> None:
         
     Raises:
         ImportError: If fpdf package is not installed
-        FileNotFoundError: If DejaVu font file is not found
+        FileNotFoundError: If font file is not found and no default is available
         PermissionError: If required directories are not writable
     """
     # Check if fpdf is installed
@@ -37,21 +37,12 @@ def _validate_pdf_requirements(config: AnalysisConfig) -> None:
             "Please install it with: pip install fpdf"
         )
     
-    # Check if DejaVu font is available
-    font_path = "/kaggle/input/dejavusans-bold-ttf/DejaVuSans-Bold.ttf"
-    if not os.path.exists(font_path):
-        # Try to find it in the package resources
-        try:
-            import pkg_resources
-            font_path = pkg_resources.resource_filename('ai_analyst', 'resources/DejaVuSans-Bold.ttf')
-            if not os.path.exists(font_path):
-                raise FileNotFoundError
-        except (ImportError, FileNotFoundError):
+    # Check if font is specified and available
+    if config.font_path:
+        if not os.path.exists(config.font_path):
             raise FileNotFoundError(
-                "DejaVuSans-Bold.ttf font file is required for PDF generation. "
-                "Please ensure the font file is available in either: "
-                f"1. {font_path} or "
-                "2. ai_analyst/resources/DejaVuSans-Bold.ttf"
+                f"Specified font file not found: {config.font_path}. "
+                "Please ensure the font file exists or set font_path to None to use system default."
             )
     
     # Check if output directory is writable
@@ -69,6 +60,14 @@ def _validate_pdf_requirements(config: AnalysisConfig) -> None:
     if not os.access(config.tmp_dir, os.W_OK):
         raise PermissionError(
             f"Cannot write to temporary directory: {config.tmp_dir}. "
+            "Please ensure you have write permissions."
+        )
+    
+    # Check if font output directory is writable
+    os.makedirs(config.font_output_dir, exist_ok=True)
+    if not os.access(config.font_output_dir, os.W_OK):
+        raise PermissionError(
+            f"Cannot write to font output directory: {config.font_output_dir}. "
             "Please ensure you have write permissions."
         )
 
@@ -95,6 +94,16 @@ def analyse_data(
     
     # Validate PDF generation requirements
     _validate_pdf_requirements(config)
+    
+    # Initialize the appropriate client based on config
+    if config.use_api:
+        from ai_analyst.classes import APIChat
+        client = APIChat(config)
+        model_id = config.api_model_id
+    else:
+        from ai_analyst.classes import LocalChat
+        client = LocalChat(config)
+        model_id = config.model_path
     
     # Set the global DataFrame for the analysis functions
     import ai_analyst.utils.analysis_toolkit as toolkit
@@ -132,7 +141,7 @@ def analyse_data(
     final_text = chat_with_tools(
         user_message=complex_prompt,
         client=client,
-        model_id=config.model_path,
+        model_id=model_id,
         conversation_log=[],
         final_answer="",
         iterations=0,
@@ -146,4 +155,4 @@ def analyse_data(
     print("FINAL ANALYST ANSWER ===")
     print(final_text)
     print(f"PDF conversation saved at {config.pdf_path}")
-    return client.chats.create(model=config.model_path).send_message(str(data), config=config)
+    return client.chats.create(model=model_id).send_message(str(data), config=config)
