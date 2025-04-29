@@ -92,9 +92,12 @@ def line_plot_over_time(date_col: str, val_col: str, agg_func="mean", freq="D"):
     temp[date_col] = pd.to_datetime(temp[date_col], errors="coerce")
     temp = temp.dropna(subset=[date_col, val_col]).set_index(date_col)
     resampled = temp[val_col].resample(freq).agg(agg_func)
-    fig, ax = plt.subplots(); ax.plot(resampled.index, resampled.values)
+    fig, ax = plt.subplots()
+    ax.plot(resampled.index, resampled.values)
     ax.set_title(f"{agg_func} of {val_col} by {freq}"); ax.set_xlabel(date_col); ax.set_ylabel(val_col)
-    buf = io.BytesIO(); fig.savefig(buf, format="png"); buf.seek(0)
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png")
+    buf.seek(0)
     plt.close(fig)
     return base64.b64encode(buf.read()).decode()
 
@@ -102,3 +105,34 @@ def outlier_rows(col: str, z=3.0):
     global df
     z_scores = stats.zscore(df[col], nan_policy="omit")
     return df[abs(z_scores) > z].to_dict(orient="list")
+
+def scatter_plot(x_col: str, y_col: str, hue_col: str = None, figsize: tuple = (10, 6)):
+    """Create a scatter plot between two columns with optional hue parameter.
+    
+    Args:
+        x_col (str): Name of the column for x-axis
+        y_col (str): Name of the column for y-axis
+        hue_col (str, optional): Name of the column to use for color encoding
+        figsize (tuple, optional): Figure size (width, height)
+    
+    Returns:
+        str: Base64 encoded PNG image of the scatter plot
+    """
+    global df
+    fig, ax = plt.subplots(figsize=figsize)
+    
+    if hue_col:
+        sns.scatterplot(data=df, x=x_col, y=y_col, hue=hue_col, ax=ax)
+    else:
+        sns.scatterplot(data=df, x=x_col, y=y_col, ax=ax)
+    
+    ax.set_title(f'Scatter Plot: {y_col} vs {x_col}')
+    if hue_col:
+        ax.set_title(f'Scatter Plot: {y_col} vs {x_col} (colored by {hue_col})')
+    
+    plt.tight_layout()
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png")
+    buf.seek(0)
+    plt.close(fig)
+    return base64.b64encode(buf.read()).decode()

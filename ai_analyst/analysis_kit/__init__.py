@@ -8,7 +8,8 @@ from ai_analyst.utils.analysis_toolkit import (
     correlation_matrix,
     scatter_matrix_all_numeric,
     line_plot_over_time,
-    outlier_rows
+    outlier_rows,
+    scatter_plot
 )
 
 __all__ = [
@@ -21,5 +22,6 @@ __all__ = [
     'correlation_matrix',
     'scatter_matrix_all_numeric',
     'line_plot_over_time',
-    'outlier_rows'
+    'outlier_rows',
+    'scatter_plot'
 ]
