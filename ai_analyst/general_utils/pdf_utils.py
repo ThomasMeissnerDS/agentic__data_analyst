@@ -75,12 +75,13 @@ def save_conversation_to_pdf(
     pdf.cell(0, 10, "Table of Contents", ln=True)
     pdf.ln(10)
 
-    # Track sections for table of contents
+    # Track sections and visualizations
     sections = []
+    visualizations = []
     current_section = None
     pdf.set_font(config.font_family, "", 11)
 
-    # First pass: collect sections and their page numbers
+    # First pass: collect sections and visualizations
     for kind, content in conversation_log:
         if kind == "LLM":
             if content.startswith("Table of Contents"):
@@ -93,7 +94,12 @@ def save_conversation_to_pdf(
                 current_section = content.strip()
         elif kind == "TOOL_IMG":
             if current_section:
-                sections.append((f"Visualization in {current_section}", pdf.page_no()))
+                visualizations.append({
+                    "path": content,
+                    "context": current_section,
+                    "section": current_section
+                })
+            current_section = None
 
     # Add table of contents
     pdf.set_font(config.font_family, "", 11)
@@ -101,14 +107,13 @@ def save_conversation_to_pdf(
         pdf.cell(0, 10, f"{section} ......................... {page}", ln=True)
     pdf.ln(20)
 
-    # Second pass: add content with proper layout
+    # Second pass: add content without visualizations
     for kind, content in conversation_log:
         if kind == "LLM":
             if content.startswith("Table of Contents"):
                 continue
             elif content.startswith("Visualization Context:"):
-                # Store the context for the next visualization
-                current_section = content
+                continue  # Skip visualization contexts as they'll be shown with the images
             else:
                 # Check if we need a new page
                 if pdf.get_y() > 250:  # If less than 20mm left on page
@@ -118,49 +123,6 @@ def save_conversation_to_pdf(
                 pdf.set_fill_color(248, 248, 248)
                 pdf.multi_cell(0, 5, content, fill=True)
                 pdf.ln(5)
-
-        elif kind == "TOOL_IMG":
-            # Check if we need a new page - leave more space for images
-            if pdf.get_y() > 150:  # If less than 100mm left on page
-                pdf.add_page()
-            
-            # Add visualization context if available
-            if current_section:
-                pdf.set_font(config.font_family, "I", 10)
-                pdf.multi_cell(0, 5, current_section)
-                pdf.ln(5)
-            
-            # Calculate image size to fit page with proper spacing
-            img_width = 140  # Reduced from 180
-            img_height = 90  # Reduced from 120
-            
-            # Get current position and ensure we have enough space
-            x = pdf.get_x()
-            y = pdf.get_y()
-            
-            # If we don't have enough space, move to next page
-            if y + img_height > 250:  # If image would go beyond page boundary
-                pdf.add_page()
-                x = pdf.get_x()
-                y = pdf.get_y()
-            
-            # Draw border
-            pdf.set_draw_color(100, 100, 100)
-            pdf.rect(x, y, img_width, img_height)
-            
-            # Add image if it exists
-            if os.path.exists(content):
-                pdf.image(content, x=x, y=y, w=img_width)
-                pdf.set_font(config.font_family, "I", 8)
-                pdf.cell(0, 5, "Analysis Visualization", ln=True)
-            else:
-                pdf.set_font(config.font_family, "I", 8)
-                pdf.multi_cell(0, 5, f"Image not found: {content}")
-            
-            # Add more spacing after image
-            pdf.ln(15)
-            current_section = None  # Reset context after visualization
-
         elif kind == "TOOL_CODE":
             # Check if we need a new page
             if pdf.get_y() > 250:  # If less than 20mm left on page
@@ -173,7 +135,6 @@ def save_conversation_to_pdf(
             pdf.rect(x, y, 190, 20)
             pdf.multi_cell(0, 5, content, fill=True)
             pdf.ln(5)
-
         elif kind == "TOOL":
             # Check if we need a new page
             if pdf.get_y() > 250:  # If less than 20mm left on page
@@ -183,7 +144,6 @@ def save_conversation_to_pdf(
             pdf.set_fill_color(252, 252, 252)
             pdf.multi_cell(0, 5, content, fill=True)
             pdf.ln(5)
-
         elif kind == "DECIDER":
             # Check if we need a new page
             if pdf.get_y() > 250:  # If less than 20mm left on page
@@ -195,7 +155,46 @@ def save_conversation_to_pdf(
             pdf.ln(5)
             pdf.set_text_color(51, 51, 51)
 
-        pdf.set_font(config.font_family, "", 11)
+    # Add visualizations section at the end
+    if visualizations:
+        pdf.add_page()
+        pdf.set_font(config.font_family, "B", 16)
+        pdf.cell(0, 10, "Visualizations", ln=True)
+        pdf.ln(10)
+        
+        for viz in visualizations:
+            # Check if we need a new page
+            if pdf.get_y() > 150:  # If less than 100mm left on page
+                pdf.add_page()
+            
+            # Add visualization context
+            pdf.set_font(config.font_family, "I", 10)
+            pdf.multi_cell(0, 5, viz["context"])
+            pdf.ln(5)
+            
+            # Calculate image size to fit page with proper spacing
+            img_width = 140  # Reduced from 180
+            img_height = 90  # Reduced from 120
+            
+            # Get current position
+            x = pdf.get_x()
+            y = pdf.get_y()
+            
+            # Draw border
+            pdf.set_draw_color(100, 100, 100)
+            pdf.rect(x, y, img_width, img_height)
+            
+            # Add image if it exists
+            if os.path.exists(viz["path"]):
+                pdf.image(viz["path"], x=x, y=y, w=img_width)
+                pdf.set_font(config.font_family, "I", 8)
+                pdf.cell(0, 5, "Analysis Visualization", ln=True)
+            else:
+                pdf.set_font(config.font_family, "I", 8)
+                pdf.multi_cell(0, 5, f"Image not found: {viz['path']}")
+            
+            # Add more spacing after image
+            pdf.ln(15)
 
     # Footer generation info
     pdf.set_y(-15)
