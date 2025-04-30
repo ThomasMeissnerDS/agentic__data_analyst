@@ -99,39 +99,12 @@ def save_conversation_to_pdf(
 
     # Second pass: add content with proper layout
     for kind, content in conversation_log:
-        if kind == "TOOL_IMG":
-            # Check if we need a new page
-            if pdf.get_y() > 200:  # If less than 50mm left on page
-                pdf.add_page()
-            
-            pdf.set_draw_color(100, 100, 100)
-            x, y = pdf.get_x(), pdf.get_y()
-            
-            # Calculate image size to fit page
-            img_width = 180
-            img_height = 120
-            if pdf.get_y() + img_height > 250:  # If image won't fit
-                pdf.add_page()
-                y = pdf.get_y()
-            
-            pdf.rect(x, y, img_width, img_height)
-            
-            if os.path.exists(content):
-                pdf.image(content, x=x, y=y, w=img_width)
-                pdf.set_font(config.font_family, "I", 10)
-                pdf.cell(0, 5, "Analysis Visualization", ln=True)
-            else:
-                pdf.set_font(config.font_family, "I", 10)
-                pdf.multi_cell(0, 5, f"Image not found: {content}")
-            pdf.ln(10)
-
-        elif kind == "LLM":
+        if kind == "LLM":
             if content.startswith("Table of Contents"):
                 continue
             elif content.startswith("Visualization Context:"):
-                pdf.set_font(config.font_family, "I", 10)
-                pdf.multi_cell(0, 5, content)
-                pdf.ln(5)
+                # Store the context for the next visualization
+                current_section = content
             else:
                 # Check if we need a new page
                 if pdf.get_y() > 250:  # If less than 20mm left on page
@@ -141,6 +114,41 @@ def save_conversation_to_pdf(
                 pdf.set_fill_color(248, 248, 248)
                 pdf.multi_cell(0, 5, content, fill=True)
                 pdf.ln(5)
+
+        elif kind == "TOOL_IMG":
+            # Check if we need a new page
+            if pdf.get_y() > 200:  # If less than 50mm left on page
+                pdf.add_page()
+            
+            # Add visualization context if available
+            if current_section:
+                pdf.set_font(config.font_family, "I", 10)
+                pdf.multi_cell(0, 5, current_section)
+                pdf.ln(5)
+            
+            # Calculate image size to fit page (smaller size)
+            img_width = 140  # Reduced from 180
+            img_height = 90  # Reduced from 120
+            
+            # Get current position
+            x = pdf.get_x()
+            y = pdf.get_y()
+            
+            # Draw border
+            pdf.set_draw_color(100, 100, 100)
+            pdf.rect(x, y, img_width, img_height)
+            
+            # Add image if it exists
+            if os.path.exists(content):
+                pdf.image(content, x=x, y=y, w=img_width)
+                pdf.set_font(config.font_family, "I", 8)
+                pdf.cell(0, 5, "Analysis Visualization", ln=True)
+            else:
+                pdf.set_font(config.font_family, "I", 8)
+                pdf.multi_cell(0, 5, f"Image not found: {content}")
+            
+            pdf.ln(10)
+            current_section = None  # Reset context after visualization
 
         elif kind == "TOOL_CODE":
             # Check if we need a new page
