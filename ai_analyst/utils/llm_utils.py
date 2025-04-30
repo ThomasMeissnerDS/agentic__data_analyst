@@ -231,7 +231,7 @@ def chat_with_tools(
         iterations += 1
         time.sleep(sleep_secs)
 
-        _, summary = summarize_conversation(conversation_log)
+        _, summary = summarize_conversation(conversation_log, config=config)
         next_msg = f"Conversation so far (summary):\n{summary}\n\n{tool_info}\n\nContinue with your analysis, making sure to interpret any visualizations or statistical results."
         model_text = chat.send_message(next_msg, config=config).text
 
