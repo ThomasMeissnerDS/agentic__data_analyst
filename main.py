@@ -2,10 +2,15 @@ import numpy as np
 import pandas as pd
 import os
 
+import torch
+
 from ai_analyst.analysis_kit.analyse import analyse_data, _validate_pdf_requirements
 from ai_analyst.analysis_kit.config import AnalysisConfig
 
 os.environ['TRANSFORMERS_OFFLINE'] = '1'  # not sure if needed
+torch.backends.cuda.enable_mem_efficient_sdp(False)
+torch.backends.cuda.enable_flash_sdp(False)
+torch.backends.cuda.enable_math_sdp(True)
 
 
 if __name__ == "__main__":
