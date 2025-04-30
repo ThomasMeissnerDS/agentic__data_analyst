@@ -106,30 +106,16 @@ def _refine_analysis_content(conversation_log: list, config: AnalysisConfig) -> 
     
     # Track visualizations and their context
     visualizations = []
-    current_section = "executive_summary"  # Initialize with default section
+    current_section = None
     current_context = None
     
     for kind, content in conversation_log:
         if kind == "LLM":
             if content.startswith("Visualization Context:"):
                 current_context = content
-            elif content.startswith("Executive Summary"):
-                current_section = "executive_summary"
-            elif content.startswith("Data Overview"):
-                current_section = "data_overview"
-            elif content.startswith("Visual Analysis"):
-                current_section = "visual_analysis"
-            elif content.startswith("Statistical Analysis"):
-                current_section = "statistical_analysis"
-            elif content.startswith("Conclusions"):
-                current_section = "conclusions"
             else:
                 # Add content to appropriate section
-                if current_section in analysis_content:
-                    analysis_content[current_section].append(content)
-                else:
-                    # If no section is set, add to executive summary
-                    analysis_content["executive_summary"].append(content)
+                analysis_content[current_section].append(content)
         elif kind == "TOOL":
             # Add tool results to statistical analysis
             analysis_content["statistical_analysis"].append(f"Analysis Result: {content}")

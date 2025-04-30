@@ -9,55 +9,70 @@ from ai_analyst.analysis_kit.config import AnalysisConfig
 class PDF(FPDF):
     def __init__(self, font_path: str = None, font_family: str = "DejaVu", *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # Register fonts before any page is added
+
+        # Register custom font if provided
         if font_path:
             self.add_font(font_family, "", font_path, uni=True)
             self.add_font(font_family, "B", font_path, uni=True)
             self.add_font(font_family, "I", font_path, uni=True)
         self.font_family = font_family
 
+        # Turn on automatic page breaks with a 15 mm bottom margin
+        self.set_auto_page_break(auto=True, margin=15)
+
     def header(self):
-        # Attempt to locate logo via pkg_resources, fallback to relative path
+        # Try pkg_resources first, fallback to relative path
         try:
             logo_path = pkg_resources.resource_filename('ai_analyst', 'resources/logo.png')
         except Exception:
-            current_dir = os.path.dirname(os.path.abspath(__file__))
-            logo_path = os.path.join(current_dir, '..', 'resources', 'logo.png')
+            curr = os.path.dirname(os.path.abspath(__file__))
+            logo_path = os.path.join(curr, '..', 'resources', 'logo.png')
 
         if os.path.exists(logo_path):
             self.image(logo_path, 10, 8, 33)
 
-        # Header title
         self.set_font(self.font_family, 'B', 15)
         self.cell(80)
         self.cell(30, 10, 'Data Analysis Report', 0, 0, 'C')
         self.ln(20)
 
     def footer(self):
-        # Position at 1.5 cm from bottom
         self.set_y(-15)
         self.set_font(self.font_family, 'I', 8)
         self.cell(0, 10, f'Page {self.page_no()}/{{nb}}', 0, 0, 'C')
 
+    def strip_html(self, raw: str) -> str:
+        """Remove any HTML tags (e.g. <h2>, </h2>) before rendering."""
+        return re.sub(r'<[^>]+>', '', raw)
+
+    def ensure_space(self, needed_height: float):
+        """
+        If there isn't enough room on the current page to fit
+        'needed_height' (in user units), add a new page.
+        """
+        if self.get_y() + needed_height > self.page_break_trigger:
+            self.add_page()
+
 
 def save_conversation_to_pdf(
     conversation_log,
-    pdf_path,
+    pdf_path: str,
     config: AnalysisConfig,
 ):
-    # Copy the font file to the working directory and get the new path
+    """Saves the refined conversation (with LLM text, code blocks, decisions, and images)
+    into a paginated PDF, ensuring no overlaps and stripping stray HTML."""
+    # Copy fonts into working directory
     working_font_path = copy_files(config)
-    
-    # Create PDF instance with fonts already registered
+
+    # Initialize PDF and pagination settings
     pdf = PDF(working_font_path, config.font_family)
     pdf.alias_nb_pages()
-    pdf.add_page()  # header() can now use font safely
-
-    # Styles and metadata
+    pdf.add_page()
+    pdf.set_auto_page_break(auto=True, margin=15)
     pdf.set_text_color(51, 51, 51)
     pdf.set_draw_color(200, 200, 200)
 
-    # Title page
+    # — Title Page —
     pdf.set_font(config.font_family, "B", 24)
     pdf.cell(0, 20, "Data Analysis Report", ln=True, align="C")
     pdf.set_font(config.font_family, "", 12)
@@ -70,64 +85,57 @@ def save_conversation_to_pdf(
     )
     pdf.ln(20)
 
-    # Table of contents
-    pdf.set_font(config.font_family, "B", 16)
-    pdf.cell(0, 10, "Table of Contents", ln=True)
-    pdf.ln(10)
-
-    # Track sections and visualizations
-    sections = []
-    visualizations = []
+    # — First pass: collect TOC entries & visualizations —
+    sections = []       # list of (section_title, page_num)
+    visualizations = [] # list of dicts with keys: path, context
     current_section = None
-    pdf.set_font(config.font_family, "", 11)
 
-    # First pass: collect sections and visualizations
     for kind, content in conversation_log:
         if kind == "LLM":
-            if content.startswith("Table of Contents"):
+            txt = content.strip()
+            if txt.startswith("Table of Contents"):
                 continue
-            # More flexible section detection
-            elif any(content.strip().startswith(f"{i}.") for i in range(1, 10)) or \
-                 any(content.strip().startswith(f"{i}.") for i in ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX"]):
-                sections.append((content.strip(), pdf.page_no()))
-            elif content.strip().startswith("Visualization Context:"):
-                current_section = content.strip()
+            # Detect numbered or roman‐numeral headings
+            elif any(txt.startswith(f"{i}.") for i in range(1, 10)) or \
+                 any(txt.startswith(r) for r in ["I.", "II.", "III.", "IV.", "V."]):
+                sections.append((txt, pdf.page_no()))
+            elif txt.startswith("Visualization Context:"):
+                current_section = txt
         elif kind == "TOOL_IMG":
             if current_section:
                 visualizations.append({
                     "path": content,
-                    "context": current_section,
-                    "section": current_section
+                    "context": current_section
                 })
             current_section = None
 
-    # Add table of contents
+    # — Render Table of Contents —
+    pdf.set_font(config.font_family, "B", 16)
+    pdf.cell(0, 10, "Table of Contents", ln=True)
+    pdf.ln(5)
     pdf.set_font(config.font_family, "", 11)
-    for section, page in sections:
-        pdf.cell(0, 10, f"{section} ......................... {page}", ln=True)
-    pdf.ln(20)
+    for title, page in sections:
+        pdf.cell(0, 8, f"{title} ...... {page}", ln=True)
+    pdf.ln(15)
 
-    # Second pass: add content without visualizations
+    # — Second pass: render body text, code, tool outputs, decisions —
     for kind, content in conversation_log:
         if kind == "LLM":
-            if content.startswith("Table of Contents"):
+            if content.startswith(("Table of Contents", "Visualization Context:")):
                 continue
-            elif content.startswith("Visualization Context:"):
-                continue  # Skip visualization contexts as they'll be shown with the images
-            else:
-                # Check if we need a new page
-                if pdf.get_y() > 250:  # If less than 20mm left on page
-                    pdf.add_page()
-                
-                pdf.set_font(config.font_family, "", 11)
-                pdf.set_fill_color(248, 248, 248)
-                pdf.multi_cell(0, 5, content, fill=True)
-                pdf.ln(5)
+            text = pdf.strip_html(content)
+            # Estimate height: ~5 mm per line plus small padding
+            lines = text.count("\n") + 1
+            needed_h = lines * 5 + 5
+            pdf.ensure_space(needed_h)
+            pdf.set_font(config.font_family, "", 11)
+            pdf.set_fill_color(248, 248, 248)
+            pdf.multi_cell(0, 5, text, fill=True)
+            pdf.ln(5)
+
         elif kind == "TOOL_CODE":
-            # Check if we need a new page
-            if pdf.get_y() > 250:  # If less than 20mm left on page
-                pdf.add_page()
-            
+            # Reserve ~20 mm for code blocks
+            pdf.ensure_space(20)
             pdf.set_fill_color(240, 240, 240)
             pdf.set_draw_color(200, 200, 200)
             pdf.set_font(config.font_family, "", 10)
@@ -135,71 +143,67 @@ def save_conversation_to_pdf(
             pdf.rect(x, y, 190, 20)
             pdf.multi_cell(0, 5, content, fill=True)
             pdf.ln(5)
+
         elif kind == "TOOL":
-            # Check if we need a new page
-            if pdf.get_y() > 250:  # If less than 20mm left on page
-                pdf.add_page()
-            
+            text = content
+            lines = text.count("\n") + 1
+            needed_h = lines * 5 + 5
+            pdf.ensure_space(needed_h)
             pdf.set_font(config.font_family, "I", 10)
             pdf.set_fill_color(252, 252, 252)
-            pdf.multi_cell(0, 5, content, fill=True)
+            pdf.multi_cell(0, 5, text, fill=True)
             pdf.ln(5)
+
         elif kind == "DECIDER":
-            # Check if we need a new page
-            if pdf.get_y() > 250:  # If less than 20mm left on page
-                pdf.add_page()
-            
+            text = f"Decision: {content}"
+            lines = text.count("\n") + 1
+            needed_h = lines * 5 + 5
+            pdf.ensure_space(needed_h)
             pdf.set_text_color(0, 102, 204)
             pdf.set_font(config.font_family, "B", 10)
-            pdf.multi_cell(0, 5, f"Decision: {content}")
+            pdf.multi_cell(0, 5, text)
             pdf.ln(5)
             pdf.set_text_color(51, 51, 51)
 
-    # Add visualizations section at the end
+    # — Visualizations section —
     if visualizations:
         pdf.add_page()
         pdf.set_font(config.font_family, "B", 16)
         pdf.cell(0, 10, "Visualizations", ln=True)
         pdf.ln(10)
-        
+
         for viz in visualizations:
-            # Check if we need a new page
-            if pdf.get_y() > 150:  # If less than 100mm left on page
-                pdf.add_page()
-            
-            # Add visualization context
+            # Reserve space: image height + caption + buffer
+            img_h, caption_h, buffer = 90, 5, 10
+            pdf.ensure_space(img_h + caption_h + buffer)
+
             pdf.set_font(config.font_family, "I", 10)
             pdf.multi_cell(0, 5, viz["context"])
-            pdf.ln(5)
-            
-            # Calculate image size to fit page with proper spacing
-            img_width = 140  # Reduced from 180
-            img_height = 90  # Reduced from 120
-            
-            # Get current position
-            x = pdf.get_x()
-            y = pdf.get_y()
-            
-            # Draw border
+            pdf.ln(3)
+
+            x, y = pdf.get_x(), pdf.get_y()
             pdf.set_draw_color(100, 100, 100)
-            pdf.rect(x, y, img_width, img_height)
-            
-            # Add image if it exists
+            pdf.rect(x, y, 140, img_h)
+
             if os.path.exists(viz["path"]):
-                pdf.image(viz["path"], x=x, y=y, w=img_width)
+                pdf.image(viz["path"], x=x, y=y, w=140)
                 pdf.set_font(config.font_family, "I", 8)
                 pdf.cell(0, 5, "Analysis Visualization", ln=True)
             else:
                 pdf.set_font(config.font_family, "I", 8)
                 pdf.multi_cell(0, 5, f"Image not found: {viz['path']}")
-            
-            # Add more spacing after image
-            pdf.ln(15)
 
-    # Footer generation info
+            pdf.ln(buffer)
+
+    # — Footer metadata —
     pdf.set_y(-15)
     pdf.set_font(config.font_family, "I", 8)
-    pdf.cell(0, 10, f"Generated by AI Analyst | {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", align="C")
+    pdf.cell(
+        0,
+        10,
+        f"Generated by AI Analyst | {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+        align="C"
+    )
 
     pdf.output(pdf_path)
     print(f"PDF saved → {pdf_path}")
