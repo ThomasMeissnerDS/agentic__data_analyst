@@ -105,6 +105,8 @@ def _refine_analysis_content(conversation_log: list, config: AnalysisConfig) -> 
         "conclusions": []
     }
     
+    # Track visualizations and their context
+    visualizations = []
     current_section = "data_overview"
     for kind, content in conversation_log:
         if kind == "LLM":
@@ -114,8 +116,11 @@ def _refine_analysis_content(conversation_log: list, config: AnalysisConfig) -> 
             # Add tool results to statistical analysis
             analysis_content["statistical_analysis"].append(f"Analysis Result: {content}")
         elif kind == "TOOL_IMG":
-            # Add visualization to visual analysis
-            analysis_content["visual_analysis"].append(content)
+            # Store visualization with its context
+            visualizations.append({
+                "path": content,
+                "context": analysis_content[current_section][-1] if analysis_content[current_section] else "Visualization"
+            })
         elif kind == "DECIDER":
             # Add decision to appropriate section
             analysis_content[current_section].append(f"Analysis Decision: {content}")
@@ -133,7 +138,7 @@ def _refine_analysis_content(conversation_log: list, config: AnalysisConfig) -> 
     {chr(10).join(analysis_content['key_insights'])}
     
     3. Visual Analysis:
-    {len(analysis_content['visual_analysis'])} visualizations available
+    {len(visualizations)} visualizations available with their context
     
     4. Statistical Analysis:
     {chr(10).join(analysis_content['statistical_analysis'])}
@@ -142,20 +147,24 @@ def _refine_analysis_content(conversation_log: list, config: AnalysisConfig) -> 
     {chr(10).join(analysis_content['conclusions'])}
     
     Please create a well-structured report with the following sections:
-    1. Executive Summary - A concise overview of the key findings
-    2. Data Overview - Initial observations about the dataset
-    3. Key Insights - The most important findings from the analysis
-    4. Visual Analysis - Organized presentation of visualizations with clear interpretations
-    5. Statistical Analysis - Summary of statistical findings
-    6. Conclusions and Recommendations - Actionable insights and next steps
+    1. Table of Contents - List all sections with page numbers
+    2. Executive Summary - A concise overview of the key findings
+    3. Data Overview - Initial observations about the dataset
+    4. Key Insights - The most important findings from the analysis
+    5. Visual Analysis - Organized presentation of visualizations with clear interpretations
+    6. Statistical Analysis - Summary of statistical findings
+    7. Conclusions and Recommendations - Actionable insights and next steps
     
     Rules:
+    - Create a clear table of contents at the beginning
     - Remove any redundant information
     - Ensure each visualization is presented with clear context and interpretation
     - Maintain a professional and analytical tone
     - Focus on actionable insights
     - Keep the most relevant visualizations and remove duplicates
     - Ensure smooth transitions between sections
+    - Place visualizations close to their relevant text descriptions
+    - Ensure proper page breaks and layout
     
     Please provide the refined content in a structured format that can be easily converted to a PDF.
     """
@@ -171,9 +180,10 @@ def _refine_analysis_content(conversation_log: list, config: AnalysisConfig) -> 
     # Add the refined content as a single LLM message
     refined_log.append(("LLM", refined_content))
     
-    # Preserve the original visualizations but in a more organized way
-    for visualization in analysis_content["visual_analysis"]:
-        refined_log.append(("TOOL_IMG", visualization))
+    # Preserve the visualizations with their context
+    for viz in visualizations:
+        refined_log.append(("LLM", f"Visualization Context: {viz['context']}"))
+        refined_log.append(("TOOL_IMG", viz['path']))
     
     return refined_log
 
