@@ -155,7 +155,7 @@ def chat_with_tools(
     - CORRECT: correlation("Rainfall", "Temperature")
     - INCORRECT: correlation(Rainfall, Temperature)
 
-    The dataset is already in a global 'df'. The data is about {config.data_about}.
+    The dataset is already in a global 'df'. The data is about {data_about}
     Available columns in the dataset: {df.columns.tolist()}
     
     You can call any tool by producing a code block with:
@@ -189,6 +189,15 @@ def chat_with_tools(
     8. Use outlier_rows() to investigate specific columns that show potential anomalies
     9. Avoid repetitive analysis - if you've already examined a relationship, move on to new insights
     10. Each iteration should focus on a different aspect of the data
+
+    VISUALIZATION GUIDELINES:
+    1. When describing a relationship between variables, ALWAYS generate a visualization using the appropriate function
+    2. For comparing two numeric variables, use scatter_plot()
+    3. For showing distributions, use boxplot_all_columns()
+    4. For time series data, use line_plot_over_time()
+    5. For correlation analysis, use correlation_matrix() followed by scatter_plot() for interesting relationships
+    6. Don't just describe what you would show - actually generate the visualization using the provided functions
+    7. Each visualization should be accompanied by a clear interpretation of what it shows
 
     ONLY USE THE FUNCTIONS THAT ARE LISTED ABOVE. Do not write any code that is not in this list.
     
