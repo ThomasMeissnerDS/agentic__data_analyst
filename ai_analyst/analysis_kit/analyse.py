@@ -76,6 +76,74 @@ def _validate_pdf_requirements(config: AnalysisConfig) -> None:
 client = _DummyClient()
 model_id = "gemma-3-local"
 
+def _refine_analysis_content(conversation_log: list, config: AnalysisConfig) -> list:
+    """Refine and organize the analysis content to create a more polished report.
+    
+    Args:
+        conversation_log (list): List of tuples containing the conversation history
+        config (AnalysisConfig): Configuration object containing settings
+        
+    Returns:
+        list: Refined conversation log with organized content
+    """
+    # Initialize the appropriate client based on config
+    if config.use_api:
+        from ai_analyst.classes import APIChat
+        client = APIChat(config)
+        model_id = config.api_model_id
+    else:
+        client = _DummyClient()
+        model_id = config.model_path
+    
+    # Create a prompt for the refinement LLM
+    refinement_prompt = f"""
+    You are a Data Analysis Report Refiner. Your task is to take the raw analysis content and create a polished, professional report.
+    
+    The current content contains:
+    1. Various visualizations and their interpretations
+    2. Statistical analyses and their findings
+    3. Potentially repetitive or redundant information
+    
+    Please organize this content into a well-structured report with the following sections:
+    1. Executive Summary - A concise overview of the key findings
+    2. Data Overview - Initial observations about the dataset
+    3. Key Insights - The most important findings from the analysis
+    4. Visual Analysis - Organized presentation of visualizations with clear interpretations
+    5. Statistical Analysis - Summary of statistical findings
+    6. Conclusions and Recommendations - Actionable insights and next steps
+    
+    Rules:
+    - Remove any redundant information
+    - Ensure each visualization is presented with clear context and interpretation
+    - Maintain a professional and analytical tone
+    - Focus on actionable insights
+    - Keep the most relevant visualizations and remove duplicates
+    - Ensure smooth transitions between sections
+    
+    Here is the current content to refine:
+    {conversation_log}
+    
+    Please provide the refined content in a structured format that can be easily converted to a PDF.
+    """
+    
+    # Get the refined content from the LLM
+    chat = client.chats.create(model=model_id)
+    response = chat.send_message(refinement_prompt, config=config)
+    refined_content = response.text
+    
+    # Convert the refined content back into the conversation log format
+    refined_log = []
+    
+    # Add the refined content as a single LLM message
+    refined_log.append(("LLM", refined_content))
+    
+    # Preserve the original visualizations but in a more organized way
+    for kind, content in conversation_log:
+        if kind == "TOOL_IMG":
+            refined_log.append(("TOOL_IMG", content))
+    
+    return refined_log
+
 def analyse_data(
     data: pd.DataFrame,
     config: Optional[AnalysisConfig] = None,
@@ -155,6 +223,17 @@ def analyse_data(
         config=config,
         df=data
     )
+    
+    # Get the conversation log from the chat_with_tools function
+    conversation_log = client.chats.create(model=model_id).conversation_log
+    
+    # Refine the analysis content
+    refined_log = _refine_analysis_content(conversation_log, config)
+    
+    # Save the refined content to PDF
+    from ai_analyst.general_utils.pdf_utils import save_conversation_to_pdf
+    save_conversation_to_pdf(refined_log, config.pdf_path, config)
+    
     print("FINAL ANALYST ANSWER ===")
     print(final_text)
     print(f"PDF conversation saved at {config.pdf_path}")
