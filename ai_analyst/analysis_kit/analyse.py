@@ -99,7 +99,6 @@ def _refine_analysis_content(conversation_log: list, config: AnalysisConfig) -> 
     analysis_content = {
         "executive_summary": [],
         "data_overview": [],
-        "key_insights": [],
         "visual_analysis": [],
         "statistical_analysis": [],
         "conclusions": []
@@ -107,11 +106,16 @@ def _refine_analysis_content(conversation_log: list, config: AnalysisConfig) -> 
     
     # Track visualizations and their context
     visualizations = []
-    current_section = "data_overview"
+    current_section = None
+    current_context = None
+    
     for kind, content in conversation_log:
         if kind == "LLM":
-            # Add content to appropriate section
-            analysis_content[current_section].append(content)
+            if content.startswith("Visualization Context:"):
+                current_context = content
+            else:
+                # Add content to appropriate section
+                analysis_content[current_section].append(content)
         elif kind == "TOOL":
             # Add tool results to statistical analysis
             analysis_content["statistical_analysis"].append(f"Analysis Result: {content}")
@@ -119,68 +123,93 @@ def _refine_analysis_content(conversation_log: list, config: AnalysisConfig) -> 
             # Store visualization with its context
             visualizations.append({
                 "path": content,
-                "context": analysis_content[current_section][-1] if analysis_content[current_section] else "Visualization"
+                "context": current_context or "Visualization",
+                "section": current_section
             })
+            current_context = None
         elif kind == "DECIDER":
             # Add decision to appropriate section
             analysis_content[current_section].append(f"Analysis Decision: {content}")
     
-    # Create a prompt for the refinement LLM
-    refinement_prompt = f"""
-    You are a Data Analysis Report Refiner. Your task is to take the raw analysis content and create a polished, professional report.
+    # Create refined content for each section in specific order
+    refined_sections = {}
+    section_order = [
+        ("visual_analysis", "Visual Analysis"),
+        ("statistical_analysis", "Statistical Analysis"),
+        ("data_overview", "Data Overview"),
+        ("executive_summary", "Executive Summary"),
+        ("conclusions", "Conclusions")
+    ]
     
-    Here is the organized content from the analysis:
+    for section_key, section_title in section_order:
+        # Create a prompt for each section
+        section_prompt = f"""
+        You are a Data Analysis Report Refiner. Your task is to create a polished section for the report.
+        
+        Section: {section_title}
+        
+        Content to refine:
+        {chr(10).join(analysis_content[section_key])}
+        
+        {f"Relevant visualizations: {len([v for v in visualizations if v['section'] == section_key])}" if section_key in ['visual_analysis', 'statistical_analysis'] else ""}
+        
+        Please create a well-structured section with:
+        1. A clear section header
+        2. The main content
+        3. Any relevant visualizations with their context (if applicable)
+        4. A brief summary of key points
+        
+        Rules:
+        - Maintain a professional and analytical tone
+        - Focus on actionable insights
+        - Remove any redundant information
+        - Ensure smooth transitions between points
+        - Place visualizations close to their relevant text descriptions
+        """
+        
+        # Get the refined content for this section
+        chat = client.chats.create(model=model_id)
+        response = chat.send_message(section_prompt, config=config)
+        refined_sections[section_key] = response.text
     
-    1. Data Overview:
-    {chr(10).join(analysis_content['data_overview'])}
+    # Create the final report structure
+    final_report = f"""
+    Table of Contents
+    ================
+    1. Executive Summary
+    2. Data Overview
+    3. Visual Analysis
+    4. Statistical Analysis
+    5. Conclusions
     
-    2. Key Insights:
-    {chr(10).join(analysis_content['key_insights'])}
+    Executive Summary
+    ================
+    {refined_sections['executive_summary']}
     
-    3. Visual Analysis:
-    {len(visualizations)} visualizations available with their context
+    Data Overview
+    ============
+    {refined_sections['data_overview']}
     
-    4. Statistical Analysis:
-    {chr(10).join(analysis_content['statistical_analysis'])}
+    Visual Analysis
+    ==============
+    {refined_sections['visual_analysis']}
     
-    5. Conclusions:
-    {chr(10).join(analysis_content['conclusions'])}
+    Statistical Analysis
+    ==================
+    {refined_sections['statistical_analysis']}
     
-    Please create a well-structured report with the following sections:
-    1. Table of Contents - List all sections with page numbers
-    2. Executive Summary - A concise overview of the key findings
-    3. Data Overview - Initial observations about the dataset
-    4. Key Insights - The most important findings from the analysis
-    5. Visual Analysis - Organized presentation of visualizations with clear interpretations
-    6. Statistical Analysis - Summary of statistical findings
-    7. Conclusions and Recommendations - Actionable insights and next steps
-    
-    Rules:
-    - Create a clear table of contents at the beginning
-    - Remove any redundant information
-    - Ensure each visualization is presented with clear context and interpretation
-    - Maintain a professional and analytical tone
-    - Focus on actionable insights
-    - Keep the most relevant visualizations and remove duplicates
-    - Ensure smooth transitions between sections
-    - Place visualizations close to their relevant text descriptions
-    - Ensure proper page breaks and layout
-    
-    Please provide the refined content in a structured format that can be easily converted to a PDF.
+    Conclusions
+    ==========
+    {refined_sections['conclusions']}
     """
-    
-    # Get the refined content from the LLM
-    chat = client.chats.create(model=model_id)
-    response = chat.send_message(refinement_prompt, config=config)
-    refined_content = response.text
     
     # Convert the refined content back into the conversation log format
     refined_log = []
     
-    # Add the refined content as a single LLM message
-    refined_log.append(("LLM", refined_content))
+    # Add the final report
+    refined_log.append(("LLM", final_report))
     
-    # Preserve the visualizations with their context
+    # Add visualizations in their respective sections
     for viz in visualizations:
         refined_log.append(("LLM", f"Visualization Context: {viz['context']}"))
         refined_log.append(("TOOL_IMG", viz['path']))
