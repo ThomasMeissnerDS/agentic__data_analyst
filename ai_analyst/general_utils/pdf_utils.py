@@ -85,8 +85,12 @@ def save_conversation_to_pdf(
         if kind == "LLM":
             if content.startswith("Table of Contents"):
                 continue
-            elif content.startswith("1.") or content.startswith("2.") or content.startswith("3.") or content.startswith("4.") or content.startswith("5.") or content.startswith("6.") or content.startswith("7."):
-                sections.append((content, pdf.page_no()))
+            # More flexible section detection
+            elif any(content.strip().startswith(f"{i}.") for i in range(1, 10)) or \
+                 any(content.strip().startswith(f"{i}.") for i in ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX"]):
+                sections.append((content.strip(), pdf.page_no()))
+            elif content.strip().startswith("Visualization Context:"):
+                current_section = content.strip()
         elif kind == "TOOL_IMG":
             if current_section:
                 sections.append((f"Visualization in {current_section}", pdf.page_no()))
@@ -116,8 +120,8 @@ def save_conversation_to_pdf(
                 pdf.ln(5)
 
         elif kind == "TOOL_IMG":
-            # Check if we need a new page
-            if pdf.get_y() > 200:  # If less than 50mm left on page
+            # Check if we need a new page - leave more space for images
+            if pdf.get_y() > 150:  # If less than 100mm left on page
                 pdf.add_page()
             
             # Add visualization context if available
@@ -126,13 +130,19 @@ def save_conversation_to_pdf(
                 pdf.multi_cell(0, 5, current_section)
                 pdf.ln(5)
             
-            # Calculate image size to fit page (smaller size)
+            # Calculate image size to fit page with proper spacing
             img_width = 140  # Reduced from 180
             img_height = 90  # Reduced from 120
             
-            # Get current position
+            # Get current position and ensure we have enough space
             x = pdf.get_x()
             y = pdf.get_y()
+            
+            # If we don't have enough space, move to next page
+            if y + img_height > 250:  # If image would go beyond page boundary
+                pdf.add_page()
+                x = pdf.get_x()
+                y = pdf.get_y()
             
             # Draw border
             pdf.set_draw_color(100, 100, 100)
@@ -147,7 +157,8 @@ def save_conversation_to_pdf(
                 pdf.set_font(config.font_family, "I", 8)
                 pdf.multi_cell(0, 5, f"Image not found: {content}")
             
-            pdf.ln(10)
+            # Add more spacing after image
+            pdf.ln(15)
             current_section = None  # Reset context after visualization
 
         elif kind == "TOOL_CODE":
