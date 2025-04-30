@@ -121,8 +121,6 @@ def _refine_analysis_content(conversation_log: list, config: AnalysisConfig) -> 
             analysis_content[current_section].append(f"Analysis Decision: {content}")
     
     # Create a prompt for the refinement LLM
-    joined_text = "\n".join(text_content)
-
     refinement_prompt = f"""
     You are a Data Analysis Report Refiner. Your task is to take the raw analysis content and create a polished, professional report.
     
@@ -159,13 +157,10 @@ def _refine_analysis_content(conversation_log: list, config: AnalysisConfig) -> 
     - Keep the most relevant visualizations and remove duplicates
     - Ensure smooth transitions between sections
     
-    Here is the current content to refine:
-    {joined_text}
-    
     Please provide the refined content in a structured format that can be easily converted to a PDF.
     """
-
-# Get the refined content from the LLM
+    
+    # Get the refined content from the LLM
     chat = client.chats.create(model=model_id)
     response = chat.send_message(refinement_prompt, config=config)
     refined_content = response.text
