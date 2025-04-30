@@ -74,15 +74,19 @@ def save_conversation_to_pdf(
     pdf.cell(0, 10, "Table of Contents", ln=True)
     pdf.ln(10)
 
-    sections = []
+    # Track unique sections and their content
+    sections = {}
     current_section = None
     pdf.set_font(config.font_family, "", 11)
 
     for kind, content in conversation_log:
         if kind == "TOOL_IMG":
-            pdf.set_font(config.font_family, "B", 14)
             current_section = "Visualization"
-            sections.append(current_section)
+            if current_section not in sections:
+                sections[current_section] = []
+            sections[current_section].append(("TOOL_IMG", content))
+            
+            pdf.set_font(config.font_family, "B", 14)
             pdf.cell(0, 10, current_section, ln=True)
             pdf.ln(5)
 
@@ -100,12 +104,20 @@ def save_conversation_to_pdf(
             pdf.ln(10)
 
         elif kind == "LLM":
+            if current_section not in sections:
+                sections[current_section] = []
+            sections[current_section].append(("LLM", content))
+            
             pdf.set_font(config.font_family, "", 11)
             pdf.set_fill_color(248, 248, 248)
             pdf.multi_cell(0, 5, content, fill=True)
             pdf.ln(5)
 
         elif kind == "TOOL_CODE":
+            if current_section not in sections:
+                sections[current_section] = []
+            sections[current_section].append(("TOOL_CODE", content))
+            
             pdf.set_fill_color(240, 240, 240)
             pdf.set_draw_color(200, 200, 200)
             pdf.set_font(config.font_family, "", 10)
@@ -115,12 +127,20 @@ def save_conversation_to_pdf(
             pdf.ln(5)
 
         elif kind == "TOOL":
+            if current_section not in sections:
+                sections[current_section] = []
+            sections[current_section].append(("TOOL", content))
+            
             pdf.set_font(config.font_family, "I", 10)
             pdf.set_fill_color(252, 252, 252)
             pdf.multi_cell(0, 5, content, fill=True)
             pdf.ln(5)
 
         elif kind == "DECIDER":
+            if current_section not in sections:
+                sections[current_section] = []
+            sections[current_section].append(("DECIDER", content))
+            
             pdf.set_text_color(0, 102, 204)
             pdf.set_font(config.font_family, "B", 10)
             pdf.multi_cell(0, 5, f"Decision: {content}")
@@ -128,6 +148,32 @@ def save_conversation_to_pdf(
             pdf.set_text_color(51, 51, 51)
 
         pdf.set_font(config.font_family, "", 11)
+
+    # Add a summary section at the end
+    pdf.add_page()
+    pdf.set_font(config.font_family, "B", 16)
+    pdf.cell(0, 10, "Analysis Summary", ln=True)
+    pdf.ln(10)
+    
+    pdf.set_font(config.font_family, "", 11)
+    for section, content in sections.items():
+        if section:
+            pdf.set_font(config.font_family, "B", 12)
+            pdf.cell(0, 10, f"{section}:", ln=True)
+            pdf.set_font(config.font_family, "", 11)
+            
+            # Extract unique insights from LLM responses
+            insights = set()
+            for kind, text in content:
+                if kind == "LLM":
+                    # Split into sentences and add unique insights
+                    sentences = [s.strip() for s in text.split('.') if s.strip()]
+                    insights.update(sentences)
+            
+            # Add unique insights to the summary
+            for insight in insights:
+                pdf.multi_cell(0, 5, f"• {insight}")
+            pdf.ln(5)
 
     # Footer generation info
     pdf.set_y(-15)

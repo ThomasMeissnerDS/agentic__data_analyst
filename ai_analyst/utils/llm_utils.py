@@ -156,7 +156,7 @@ def chat_with_tools(
     - CORRECT: correlation("Rainfall", "Temperature")
     - INCORRECT: correlation(Rainfall, Temperature)
 
-    The dataset is already in a global 'df'. The data is about {config.data_about}.
+    The dataset is already in a global 'df'. The data is about {data_about}
     Available columns in the dataset: {df.columns.tolist()}
     
     You can call any tool by producing a code block with:
@@ -164,21 +164,6 @@ def chat_with_tools(
     <function_call_here>
     ```
     
-    IMPORTANT: After each tool call, you MUST provide a clear interpretation of the results. Here is a list 
-    of the functions you can use, and an example explanation for each of them:
-    - For correlation_matrix(): Explain the strongest correlations and any interesting patterns
-    - For boxplot_all_columns(): Describe the distribution characteristics and any outliers
-    - For scatter_matrix_all_numeric(): Point out any notable relationships between variables
-    - For line_plot_over_time(): Explain trends, seasonality, or other temporal patterns
-    - For outlier_rows(): Explain the outliers and their significance
-    - For describe_df(): Explain the summary statistics of the data
-    - For groupby_aggregate(): Explain the aggregation results
-    - For groupby_aggregate_multi(): Explain the aggregation results
-    - For filter_data(): Explain the filtered data
-    - For boxplot_all_columns(): Explain the boxplot results
-    - For correlation_matrix(): Explain the correlation matrix results
-    - For scatter_plot(): Explain the scatter plot results
-
     ANALYSIS STRATEGY GUIDELINES:
     1. Start with a broad overview using describe_df() to understand the data distribution
     2. Use boxplot_all_columns() to identify potential outliers and distribution characteristics
@@ -191,8 +176,13 @@ def chat_with_tools(
     9. Avoid repetitive analysis - if you've already examined a relationship, move on to new insights
     10. Each iteration should focus on a different aspect of the data
 
-    ONLY USE THE FUNCTIONS THAT ARE LISTED ABOVE. Do not write any code that is not in this list.
-    
+    IMPORTANT: After each tool call, you MUST provide a clear interpretation of the results. Focus on:
+    - Key insights and patterns
+    - Statistical significance
+    - Practical implications
+    - Any anomalies or outliers
+    - How this relates to previous findings
+
     Your analysis should be data-driven and focus on actionable insights. Each iteration should provide new, non-repetitive insights about the data.
     """
 
@@ -202,13 +192,30 @@ def chat_with_tools(
     model_text = response.text
     final_answer, iterations = "", 0
 
+    # Track analyzed relationships to avoid repetition
+    analyzed_relationships = set()
+    analyzed_columns = set()
+
     while True:
         pre, code_block, post = extract_text_and_code(model_text)
 
         if pre:
             conversation_log.append(("LLM", pre)); final_answer += pre + "\n"
         if code_block:
+            # Check if this analysis has been done before
+            if code_block in analyzed_relationships:
+                next_msg = f"This analysis has already been performed. Please try a different approach or move on to a new aspect of the data.\n\n{tool_info}"
+                model_text = chat.send_message(next_msg, config=config).text
+                continue
+                
             tool_out = run_tool_code(code_block, conversation_log, tmp_dir)
+            analyzed_relationships.add(code_block)
+            
+            # Track which columns have been analyzed
+            for col in df.columns:
+                if col in code_block:
+                    analyzed_columns.add(col)
+            
             # Add a reminder for interpretation if the tool output is a visualization
             if "base64" in tool_out:
                 next_msg = f"Tool output:\n{tool_out}\n\n{tool_info}\n\nPlease provide a detailed interpretation of these results. Focus on key insights and patterns."
@@ -231,8 +238,9 @@ def chat_with_tools(
         iterations += 1
         time.sleep(sleep_secs)
 
-        _, summary = summarize_conversation(conversation_log)
-        next_msg = f"Conversation so far (summary):\n{summary}\n\n{tool_info}\n\nContinue with your analysis, making sure to interpret any visualizations or statistical results."
+        # Provide feedback about what has been analyzed so far
+        analyzed_summary = f"Columns analyzed so far: {sorted(analyzed_columns)}\n"
+        next_msg = f"Conversation so far:\n{analyzed_summary}\n\n{tool_info}\n\nContinue with your analysis, focusing on new aspects of the data that haven't been explored yet."
         model_text = chat.send_message(next_msg, config=config).text
 
     save_conversation_to_pdf(conversation_log, pdf_path, config)
