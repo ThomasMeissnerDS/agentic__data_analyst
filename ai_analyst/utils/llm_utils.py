@@ -133,7 +133,6 @@ def chat_with_tools(
         config: AnalysisConfig = None,
         df: pd.DataFrame = None,
         ) -> str:
-    conversation_log = []
     chat = client.chats.create(model=model_id)
 
     # Create the tool information string that will be included in every message

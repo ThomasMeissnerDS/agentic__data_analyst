@@ -95,6 +95,16 @@ def _refine_analysis_content(conversation_log: list, config: AnalysisConfig) -> 
         client = _DummyClient()
         model_id = config.model_path
     
+    # Extract the text content from the conversation log
+    text_content = []
+    for kind, content in conversation_log:
+        if kind == "LLM":
+            text_content.append(content)
+        elif kind == "TOOL":
+            text_content.append(f"Analysis Result: {content}")
+        elif kind == "DECIDER":
+            text_content.append(f"Analysis Decision: {content}")
+    
     # Create a prompt for the refinement LLM
     refinement_prompt = f"""
     You are a Data Analysis Report Refiner. Your task is to take the raw analysis content and create a polished, professional report.
@@ -121,7 +131,7 @@ def _refine_analysis_content(conversation_log: list, config: AnalysisConfig) -> 
     - Ensure smooth transitions between sections
     
     Here is the current content to refine:
-    {conversation_log}
+    {"\n".join(text_content)}
     
     Please provide the refined content in a structured format that can be easily converted to a PDF.
     """
