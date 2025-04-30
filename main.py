@@ -19,14 +19,14 @@ if __name__ == "__main__":
 
     ai_cfg = AnalysisConfig(
         data_path=DATA_PATH,
-        model_path="google/gemma-3-4b-it",  # default
+        model_path="google/gemma-3-12b-it",  # default
         data_about="This dataset contains information about rainfall",
         target_column=TARGET,
         pdf_path="/home/thomas/Downloads/report.pdf",
         tmp_dir="/home/thomas/Downloads/_plots",
         font_output_dir="/home/thomas/Downloads/_fonts",
         default_font_path="/home/thomas/Downloads/DejaVuSans-Bold.ttf",
-        max_iterations=5
+        max_iterations=3
     )
 
     _validate_pdf_requirements(ai_cfg)

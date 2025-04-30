@@ -4,6 +4,7 @@ import os
 from datetime import datetime
 import pkg_resources
 from ai_analyst.analysis_kit.config import AnalysisConfig
+import re
 
 
 class PDF(FPDF):
