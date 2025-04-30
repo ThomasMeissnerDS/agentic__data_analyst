@@ -77,25 +77,8 @@ client = _DummyClient()
 model_id = "gemma-3-local"
 
 def _refine_analysis_content(conversation_log: list, config: AnalysisConfig) -> list:
-    """Refine and organize the analysis content to create a more polished report.
-    
-    Args:
-        conversation_log (list): List of tuples containing the conversation history
-        config (AnalysisConfig): Configuration object containing settings
-        
-    Returns:
-        list: Refined conversation log with organized content
-    """
-    # Initialize the appropriate client based on config
-    if config.use_api:
-        from ai_analyst.classes import APIChat
-        client = APIChat(config)
-        model_id = config.api_model_id
-    else:
-        client = _DummyClient()
-        model_id = config.model_path
-    
-    # Extract and organize content from the conversation log
+    """Refine and organize the analysis content to create a more polished report."""
+    # Initialize content buckets
     analysis_content = {
         "executive_summary": [],
         "data_overview": [],
@@ -103,118 +86,137 @@ def _refine_analysis_content(conversation_log: list, config: AnalysisConfig) -> 
         "statistical_analysis": [],
         "conclusions": []
     }
-    
-    # Track visualizations and their context
     visualizations = []
     current_section = None
     current_context = None
-    
+
+    # Map human‐readable headers to our keys
+    section_headers = {
+        "Executive Summary":     "executive_summary",
+        "Data Overview":         "data_overview",
+        "Visual Analysis":       "visual_analysis",
+        "Statistical Analysis":  "statistical_analysis",
+        "Conclusions":           "conclusions"
+    }
+
+    # 1) First pass: bucket raw entries
     for kind, content in conversation_log:
         if kind == "LLM":
-            if content.startswith("Visualization Context:"):
-                current_context = content
+            text = content.strip()
+
+            # a) Is this a section header?
+            for header, key in section_headers.items():
+                if text.startswith(header):
+                    current_section = key
+                    break
             else:
-                # Add content to appropriate section
-                analysis_content[current_section].append(content)
+                # b) Is this a visualization context marker?
+                if text.startswith("Visualization Context:"):
+                    current_context = text
+                # c) Otherwise, append to the current section (if set)
+                elif current_section is not None:
+                    analysis_content[current_section].append(text)
+                # if current_section is None, we skip until we see the first header
+
         elif kind == "TOOL":
-            # Add tool results to statistical analysis
+            # always belongs in statistical_analysis
             analysis_content["statistical_analysis"].append(f"Analysis Result: {content}")
+
         elif kind == "TOOL_IMG":
-            # Store visualization with its context
+            # attach the image along with its last context
             visualizations.append({
                 "path": content,
                 "context": current_context or "Visualization",
                 "section": current_section
             })
             current_context = None
+
         elif kind == "DECIDER":
-            # Add decision to appropriate section
-            analysis_content[current_section].append(f"Analysis Decision: {content}")
-    
-    # Create refined content for each section in specific order
+            if current_section is not None:
+                analysis_content[current_section].append(f"Analysis Decision: {content}")
+
+    # 2) Refine each section in the desired order
     refined_sections = {}
     section_order = [
-        ("visual_analysis", "Visual Analysis"),
+        ("visual_analysis",      "Visual Analysis"),
         ("statistical_analysis", "Statistical Analysis"),
-        ("data_overview", "Data Overview"),
-        ("executive_summary", "Executive Summary"),
-        ("conclusions", "Conclusions")
+        ("data_overview",        "Data Overview"),
+        ("executive_summary",    "Executive Summary"),
+        ("conclusions",          "Conclusions")
     ]
-    
-    for section_key, section_title in section_order:
-        # Create a prompt for each section
-        section_prompt = f"""
-        You are a Data Analysis Report Refiner. Your task is to create a polished section for the report.
-        
-        Section: {section_title}
-        
-        Content to refine:
-        {chr(10).join(analysis_content[section_key])}
-        
-        {f"Relevant visualizations: {len([v for v in visualizations if v['section'] == section_key])}" if section_key in ['visual_analysis', 'statistical_analysis'] else ""}
-        
-        Please create a well-structured section with:
-        1. A clear section header
-        2. The main content
-        3. Any relevant visualizations with their context (if applicable)
-        4. A brief summary of key points
-        
-        Rules:
-        - Maintain a professional and analytical tone
-        - Focus on actionable insights
-        - Remove any redundant information
-        - Ensure smooth transitions between points
-        - Place visualizations close to their relevant text descriptions
-        """
-        
-        # Get the refined content for this section
-        chat = client.chats.create(model=model_id)
-        response = chat.send_message(section_prompt, config=config)
-        refined_sections[section_key] = response.text
-    
-    # Create the final report structure
+
+    for key, title in section_order:
+        # build the prompt
+        prompt = f"""
+You are a Data Analysis Report Refiner.
+
+Section: {title}
+
+Content to refine:
+{chr(10).join(analysis_content[key])}
+
+{"Relevant visualizations: " + str(len([v for v in visualizations if v["section"] == key])) if key in ("visual_analysis","statistical_analysis") else ""}
+
+Please produce:
+1. A clear section header
+2. Polished narrative
+3. Any visuals placed near their context
+4. A brief summary of key points
+
+Maintain a professional tone and focus on actionable insights.
+"""
+        # call out to the LLM
+        if config.use_api:
+            from ai_analyst.classes import APIChat
+            client = APIChat(config)
+            model = config.api_model_id
+        else:
+            client = _DummyClient()
+            model = config.model_path
+
+        chat = client.chats.create(model=model)
+        resp = chat.send_message(prompt, config=config)
+        refined_sections[key] = resp.text
+
+    # 3) Build the final report structure as a new conversation log
     final_report = f"""
-    Table of Contents
-    ================
-    1. Executive Summary
-    2. Data Overview
-    3. Visual Analysis
-    4. Statistical Analysis
-    5. Conclusions
-    
-    Executive Summary
-    ================
-    {refined_sections['executive_summary']}
-    
-    Data Overview
-    ============
-    {refined_sections['data_overview']}
-    
-    Visual Analysis
-    ==============
-    {refined_sections['visual_analysis']}
-    
-    Statistical Analysis
-    ==================
-    {refined_sections['statistical_analysis']}
-    
-    Conclusions
-    ==========
-    {refined_sections['conclusions']}
-    """
-    
-    # Convert the refined content back into the conversation log format
-    refined_log = []
-    
-    # Add the final report
-    refined_log.append(("LLM", final_report))
-    
-    # Add visualizations in their respective sections
+Table of Contents
+================
+1. Executive Summary
+2. Data Overview
+3. Visual Analysis
+4. Statistical Analysis
+5. Conclusions
+
+Executive Summary
+=================
+{refined_sections['executive_summary']}
+
+Data Overview
+=============
+{refined_sections['data_overview']}
+
+Visual Analysis
+===============
+{refined_sections['visual_analysis']}
+
+Statistical Analysis
+====================
+{refined_sections['statistical_analysis']}
+
+Conclusions
+===========
+{refined_sections['conclusions']}
+"""
+    refined_log = [("LLM", final_report)]
+
+    # 4) Re-insert visualizations in order
     for viz in visualizations:
         refined_log.append(("LLM", f"Visualization Context: {viz['context']}"))
-        refined_log.append(("TOOL_IMG", viz['path']))
-    
+        refined_log.append(("TOOL_IMG", viz["path"]))
+
     return refined_log
+
 
 def analyse_data(
     data: pd.DataFrame,
