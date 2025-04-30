@@ -209,11 +209,14 @@ def analyse_data(
     ```
     """
     
+    # Initialize conversation log
+    conversation_log = []
+    
     final_text = chat_with_tools(
         user_message=complex_prompt,
         client=client,
         model_id=model_id,
-        conversation_log=[],
+        conversation_log=conversation_log,
         final_answer="",
         iterations=0,
         sleep_secs=config.sleep_seconds,
@@ -223,9 +226,6 @@ def analyse_data(
         config=config,
         df=data
     )
-    
-    # Get the conversation log from the chat_with_tools function
-    conversation_log = client.chats.create(model=model_id).conversation_log
     
     # Refine the analysis content
     refined_log = _refine_analysis_content(conversation_log, config)
