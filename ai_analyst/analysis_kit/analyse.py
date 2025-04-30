@@ -95,15 +95,30 @@ def _refine_analysis_content(conversation_log: list, config: AnalysisConfig) -> 
         client = _DummyClient()
         model_id = config.model_path
     
-    # Extract the text content from the conversation log
-    text_content = []
+    # Extract and organize content from the conversation log
+    analysis_content = {
+        "executive_summary": [],
+        "data_overview": [],
+        "key_insights": [],
+        "visual_analysis": [],
+        "statistical_analysis": [],
+        "conclusions": []
+    }
+    
+    current_section = "data_overview"
     for kind, content in conversation_log:
         if kind == "LLM":
-            text_content.append(content)
+            # Add content to appropriate section
+            analysis_content[current_section].append(content)
         elif kind == "TOOL":
-            text_content.append(f"Analysis Result: {content}")
+            # Add tool results to statistical analysis
+            analysis_content["statistical_analysis"].append(f"Analysis Result: {content}")
+        elif kind == "TOOL_IMG":
+            # Add visualization to visual analysis
+            analysis_content["visual_analysis"].append(content)
         elif kind == "DECIDER":
-            text_content.append(f"Analysis Decision: {content}")
+            # Add decision to appropriate section
+            analysis_content[current_section].append(f"Analysis Decision: {content}")
     
     # Create a prompt for the refinement LLM
     joined_text = "\n".join(text_content)
@@ -111,12 +126,24 @@ def _refine_analysis_content(conversation_log: list, config: AnalysisConfig) -> 
     refinement_prompt = f"""
     You are a Data Analysis Report Refiner. Your task is to take the raw analysis content and create a polished, professional report.
     
-    The current content contains:
-    1. Various visualizations and their interpretations
-    2. Statistical analyses and their findings
-    3. Potentially repetitive or redundant information
+    Here is the organized content from the analysis:
     
-    Please organize this content into a well-structured report with the following sections:
+    1. Data Overview:
+    {chr(10).join(analysis_content['data_overview'])}
+    
+    2. Key Insights:
+    {chr(10).join(analysis_content['key_insights'])}
+    
+    3. Visual Analysis:
+    {len(analysis_content['visual_analysis'])} visualizations available
+    
+    4. Statistical Analysis:
+    {chr(10).join(analysis_content['statistical_analysis'])}
+    
+    5. Conclusions:
+    {chr(10).join(analysis_content['conclusions'])}
+    
+    Please create a well-structured report with the following sections:
     1. Executive Summary - A concise overview of the key findings
     2. Data Overview - Initial observations about the dataset
     3. Key Insights - The most important findings from the analysis
@@ -150,9 +177,8 @@ def _refine_analysis_content(conversation_log: list, config: AnalysisConfig) -> 
     refined_log.append(("LLM", refined_content))
     
     # Preserve the original visualizations but in a more organized way
-    for kind, content in conversation_log:
-        if kind == "TOOL_IMG":
-            refined_log.append(("TOOL_IMG", content))
+    for visualization in analysis_content["visual_analysis"]:
+        refined_log.append(("TOOL_IMG", visualization))
     
     return refined_log
 

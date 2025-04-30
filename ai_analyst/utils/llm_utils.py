@@ -199,13 +199,18 @@ def chat_with_tools(
     initial_message = user_message + tool_info
     response = chat.send_message(initial_message, config=config)
     model_text = response.text
-    final_answer, iterations = "", 0
+    final_answer = ""
+    iterations = 0
+
+    # Add initial message to conversation log
+    conversation_log.append(("LLM", "Starting data analysis..."))
 
     while True:
         pre, code_block, post = extract_text_and_code(model_text)
 
         if pre:
-            conversation_log.append(("LLM", pre)); final_answer += pre + "\n"
+            conversation_log.append(("LLM", pre))
+            final_answer += pre + "\n"
         if code_block:
             tool_out = run_tool_code(code_block, conversation_log, tmp_dir)
             # Add a reminder for interpretation if the tool output is a visualization
@@ -214,7 +219,8 @@ def chat_with_tools(
                 model_text = chat.send_message(next_msg, config=config).text
                 continue
         if post:
-            conversation_log.append(("LLM", post)); final_answer += post + "\n"
+            conversation_log.append(("LLM", post))
+            final_answer += post + "\n"
 
         cont, decider_txt = decide_if_continue_or_not(
             latest_text=model_text,
@@ -234,5 +240,7 @@ def chat_with_tools(
         next_msg = f"Conversation so far (summary):\n{summary}\n\n{tool_info}\n\nContinue with your analysis, making sure to interpret any visualizations or statistical results."
         model_text = chat.send_message(next_msg, config=config).text
 
-    save_conversation_to_pdf(conversation_log, pdf_path, config)
+    # Add final summary to conversation log
+    conversation_log.append(("LLM", "Analysis completed. Generating final report..."))
+    
     return strip_string_quotes(final_answer.strip())
