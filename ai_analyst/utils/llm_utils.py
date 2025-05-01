@@ -173,40 +173,47 @@ def run_tool_code(code_str: str, conversation_log: list, tmp_dir: str):
     return f"```tool_output\n{out_txt.strip()}\n```"
 
 
-def create_meaningful_summary(conversation_log: list, client: _DummyClient, model_id: str, config: AnalysisConfig) -> str:
-    """Create a meaningful summary of the conversation using an LLM."""
+def create_meaningful_summary(
+        current_step: tuple,  # (kind, content) of current step
+        previous_summary: str,  # Previous summary to build upon
+        client: _DummyClient, 
+        model_id: str, 
+        config: AnalysisConfig
+    ) -> str:
+    """Create or update a meaningful summary of the analysis using an LLM."""
     summary_chat = client.chats.create(model=model_id)
     
-    # Format the conversation for summarization
-    formatted_conversation = []
-    for kind, content in conversation_log:
-        if kind == "LLM":
-            formatted_conversation.append(f"Analyst: {content}")
-        elif kind == "TOOL_CODE":
-            formatted_conversation.append(f"Tool Call: {content}")
-        elif kind == "TOOL":
-            formatted_conversation.append(f"Tool Output: {content}")
-        elif kind == "DECIDER":
-            formatted_conversation.append(f"Decision: {content}")
-    
-    conversation_text = "\n".join(formatted_conversation)
+    # Format the current step for summarization
+    kind, content = current_step
+    if kind == "LLM":
+        current_step_text = f"Analyst: {content}"
+    elif kind == "TOOL_CODE":
+        current_step_text = f"Tool Call: {content}"
+    elif kind == "TOOL":
+        current_step_text = f"Tool Output: {content}"
+    elif kind == "DECIDER":
+        current_step_text = f"Decision: {content}"
+    else:
+        current_step_text = f"{kind}: {content}"
     
     summary_prompt = f"""
-    You are a data analysis summarizer. Your task is to create a concise but meaningful summary of the data analysis process so far.
+    You are a data analysis summarizer. Your task is to update the analysis summary with the latest step.
     
-    Here is the conversation history:
-    {conversation_text}
+    Here is the current summary of the analysis so far:
+    {previous_summary}
     
-    Please provide a summary that:
-    1. Captures the key insights discovered
-    2. Lists the main analysis steps taken
-    3. Highlights any interesting patterns or relationships found
-    4. Notes any important decisions made
-    5. Keeps the summary focused on the most significant findings
+    Here is the latest step in the analysis:
+    {current_step_text}
+    
+    Please update the summary to incorporate this new information. Your updated summary should:
+    1. Maintain the key insights discovered so far
+    2. Add any new insights from the latest step
+    3. Update the analysis progress
+    4. Keep the summary focused on the most significant findings
     
     Format your response as:
     SUMMARY:
-    [Your summary here]
+    [Your updated summary here]
     
     KEY FINDINGS:
     - [Key finding 1]
@@ -232,7 +239,8 @@ def chat_with_tools(
         config: AnalysisConfig = None,
         df: pd.DataFrame = None,
         ) -> str:
-    conversation_log = []
+    conversation_log = []  # Full conversation log for PDF generation
+    current_summary = ""   # Growing summary of the analysis
     chat = client.chats.create(model=model_id)
 
     # Create the tool information string that will be included in every message
@@ -334,7 +342,11 @@ def chat_with_tools(
         pre, code_block, post = extract_text_and_code(model_text)
 
         if pre:
-            conversation_log.append(("LLM", pre)); final_answer += pre + "\n"
+            conversation_log.append(("LLM", pre))
+            final_answer += pre + "\n"
+            # Update summary with the new content
+            current_summary = create_meaningful_summary(("LLM", pre), current_summary, client, model_id, config)
+            
         if code_block:
             tool_out = run_tool_code(code_block, conversation_log, tmp_dir)
             # Add a reminder for interpretation if the tool output is a visualization
@@ -342,10 +354,18 @@ def chat_with_tools(
                 next_msg = f"Tool output:\n{tool_out}\n\n{tool_info}\n\nPlease provide a detailed interpretation of these results. Focus on key insights and patterns."
                 model_text = chat.send_message(next_msg, config=config).text
                 continue
+            # Update summary with the tool call and output
+            current_summary = create_meaningful_summary(("TOOL_CODE", code_block), current_summary, client, model_id, config)
+            current_summary = create_meaningful_summary(("TOOL", tool_out), current_summary, client, model_id, config)
+            
         if post:
-            conversation_log.append(("LLM", post)); final_answer += post + "\n"
+            conversation_log.append(("LLM", post))
+            final_answer += post + "\n"
+            # Update summary with the new content
+            current_summary = create_meaningful_summary(("LLM", post), current_summary, client, model_id, config)
 
         print(f"Conversation log (iter {iterations}):", conversation_log)
+        print(f"Current summary (iter {iterations}):", current_summary)
 
         cont, decider_txt, suggestions = decide_if_continue_or_not(
             latest_text=model_text,
@@ -357,20 +377,16 @@ def chat_with_tools(
             config=config
         )
         conversation_log.append(("DECIDER", decider_txt))
+        # Update summary with the decision
+        current_summary = create_meaningful_summary(("DECIDER", decider_txt), current_summary, client, model_id, config)
+        
         if not cont or iterations >= config.max_iterations:
             break
         iterations += 1
         time.sleep(sleep_secs)
         
-        # Create meaningful summary every 5 iterations
-        summary = create_meaningful_summary(conversation_log, client, model_id, config)
-        # Keep only the last 3 items and add the summary
-        conversation_log = conversation_log[-3:] + [("SUMMARY", summary)]
-        print(f"Summary (iter {iterations}):", summary)
-        # TODO: We might need to always keep a full log of the conversation as well to pass this to the PDF generator
-            
-        # Prepare next message with suggestions and context
-        context = f"Previous analysis summary:\n{conversation_log[-1][1]}\n\n" if len(conversation_log) > 0 else ""
+        # Prepare next message with context and suggestions
+        context = f"Analysis Summary:\n{current_summary}\n\n"
         next_msg = f"{context}Previous suggestions:\n" + "\n".join([f"- {s}" for s in suggestions]) + "\n\n" + tool_info
         model_text = chat.send_message(next_msg, config=config).text
 
