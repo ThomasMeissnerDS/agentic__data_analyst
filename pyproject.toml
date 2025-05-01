@@ -29,6 +29,7 @@ numpy = ">=1.26.4"
 pandas = ">=2.0.0"
 scipy = ">=1.15.2"
 seaborn = ">=0.13.2"
+statsmodels = ">=0.14.0"
 # "torch>=2.7.0", # directly follow their instructions for GPU support
 transformers = ">=4.51.3"
 

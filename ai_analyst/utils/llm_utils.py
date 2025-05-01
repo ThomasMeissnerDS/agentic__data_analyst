@@ -76,16 +76,70 @@ def decide_if_continue_or_not(
         model_id: str, 
         data_about: str,
         df: pd.DataFrame,
+        conversation_log: list = None,
         config: AnalysisConfig = None):
     decider_chat = client.chats.create(model=model_id)
+    
+    # Extract tool calls from conversation log
+    tool_calls = []
+    if conversation_log:
+        for kind, content in conversation_log:
+            if kind == "TOOL_CODE":
+                tool_calls.append(content)
+    
     decider_prompt = (
-        "You are the DECIDER LLM. Analyse the following Analyst‑LLM output:\n\n"
+        "You are the DECIDER LLM. Your role is to guide the analysis process by:\n"
+        "1. Evaluating the current analysis progress\n"
+        "2. Suggesting specific areas for further investigation\n"
+        "3. Providing clear directions for the next analysis steps\n\n"
+        "Previous tool calls made in this analysis:\n"
+    )
+    
+    if tool_calls:
+        decider_prompt += "\n".join([f"- {call}" for call in tool_calls]) + "\n\n"
+    else:
+        decider_prompt += "No previous tool calls have been made.\n\n"
+    
+    decider_prompt += (
+        "Analyze the following Analyst-LLM output:\n\n"
         f"{latest_text}\n\n"
-        "Should the Analyst continue? Reply \"no\" if we are finished, otherwise say anything else.\n\n"
-        f"(Remember: data already loaded as df about {data_about} with columns {list(df.columns)})"
+        "Provide your response in this format:\n"
+        "CONTINUE: [yes/no]\n"
+        "SUGGESTIONS:\n"
+        "- [Specific analysis suggestion 1]\n"
+        "- [Specific analysis suggestion 2]\n"
+        "...\n\n"
+        
+        """
+        The analyst has these Python tool functions available:
+        1. correlation("column1_name", "column2_name") - Returns correlation coefficient between two columns
+        2. groupby_aggregate("groupby_column", "agg_column", "agg_func") - Groups data and applies aggregation function
+        3. groupby_aggregate_multi(["groupby_col1", "groupby_col2"], {{"agg_col": "agg_func"}}) - Groups by multiple columns and applies multiple aggregations
+        4. filter_data("column_name", "operator", value) - Returns filtered dataframe based on condition
+        5. boxplot_all_columns() - Creates boxplots for all numeric columns
+        6. correlation_matrix() - Returns correlation matrix for all numeric columns
+        7. scatter_matrix_all_numeric() - Creates scatter plots between all numeric columns
+        8. line_plot_over_time("date_col", "value_col", agg_func="mean", freq="D") - Creates time series plot with aggregation
+        9. outlier_rows("column_name", z_threshold=3.0) - Returns rows identified as outliers based on z-score
+        10. scatter_plot("x_column", "y_column", hue_col="optional_color_column") - Creates a scatter plot between two columns with optional color encoding \n
+        """
+
+        f"(Remember: data already loaded as df about {data_about})"
     )
     decider_reply = decider_chat.send_message(decider_prompt, config=config).text.strip()
-    return decider_reply.lower() != "no", decider_reply
+    
+    # Parse the decider's response
+    continue_analysis = False
+    suggestions = []
+    
+    lines = decider_reply.split('\n')
+    for line in lines:
+        if line.startswith('CONTINUE:'):
+            continue_analysis = 'yes' in line.lower()
+        elif line.startswith('-'):
+            suggestions.append(line[1:].strip())
+    
+    return continue_analysis, decider_reply, suggestions
 
 
 def run_tool_code(code_str: str, conversation_log: list, tmp_dir: str):
@@ -149,6 +203,7 @@ def chat_with_tools(
     8. line_plot_over_time("date_col", "value_col", agg_func="mean", freq="D") - Creates time series plot with aggregation
     9. outlier_rows("column_name", z_threshold=3.0) - Returns rows identified as outliers based on z-score
     10. scatter_plot("x_column", "y_column", hue_col="optional_color_column") - Creates a scatter plot between two columns with optional color encoding
+    11. analyze_missing_value_impact("column_name", "target_column") - Analyzes the impact of missing values in a column on regression with target variable
 
     You cannot ask for additional functions. These are the only functions you can use.
 
@@ -178,9 +233,10 @@ def chat_with_tools(
     - For boxplot_all_columns(): Explain the boxplot results
     - For correlation_matrix(): Explain the correlation matrix results
     - For scatter_plot(): Explain the scatter plot results
+    - For analyze_missing_value_impact(): Explain how different missing value treatments affect the regression results
 
     ANALYSIS STRATEGY GUIDELINES:
-    1. Start with a broad overview using describe_df() to understand the data distribution
+    1. Start with functions that give a broad overview of the data
     2. Use boxplot_all_columns() to identify potential outliers and distribution characteristics
     3. If you find interesting patterns in the boxplots, investigate specific columns with scatter_plot()
     4. Use correlation_matrix() sparingly - only when you have a specific hypothesis about relationships
@@ -188,8 +244,9 @@ def chat_with_tools(
     6. Use groupby_aggregate() or groupby_aggregate_multi() to explore categorical relationships
     7. If you have time-series data, use line_plot_over_time() to identify trends
     8. Use outlier_rows() to investigate specific columns that show potential anomalies
-    9. Avoid repetitive analysis - if you've already examined a relationship, move on to new insights
-    10. Each iteration should focus on a different aspect of the data
+    9. Use analyze_missing_value_impact() to understand how missing values affect relationships
+    10. Avoid repetitive analysis - if you've already examined a relationship, move on to new insights
+    11. Each iteration should focus on a different aspect of the data
 
     ONLY USE THE FUNCTIONS THAT ARE LISTED ABOVE. Do not write any code that is not in this list.
     
@@ -217,12 +274,15 @@ def chat_with_tools(
         if post:
             conversation_log.append(("LLM", post)); final_answer += post + "\n"
 
-        cont, decider_txt = decide_if_continue_or_not(
+        print(f"Conversation log (iter {iterations}):", conversation_log)
+
+        cont, decider_txt, suggestions = decide_if_continue_or_not(
             latest_text=model_text,
             client=client,
             model_id=model_id,
             data_about=data_about,
             df=df,
+            conversation_log=conversation_log,
             config=config
         )
         conversation_log.append(("DECIDER", decider_txt))
@@ -230,9 +290,9 @@ def chat_with_tools(
             break
         iterations += 1
         time.sleep(sleep_secs)
-
-        _, summary = summarize_conversation(conversation_log)
-        next_msg = f"Conversation so far (summary):\n{summary}\n\n{tool_info}\n\nContinue with your analysis, making sure to interpret any visualizations or statistical results."
+        
+        # Prepare next message with suggestions
+        next_msg = f"Previous suggestions:\n" + "\n".join([f"- {s}" for s in suggestions]) + "\n\n" + tool_info
         model_text = chat.send_message(next_msg, config=config).text
 
     save_conversation_to_pdf(conversation_log, pdf_path, config)

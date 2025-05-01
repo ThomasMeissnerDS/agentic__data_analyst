@@ -139,6 +139,9 @@ def analyse_data(
     ```tool_code
     <function_call_here>
     ```
+
+    Start with functions that give a broad overview of the data.
+    Then go into more specific analysis. Suggest additional analysis steps as needed.
     """
     
     final_text = chat_with_tools(
