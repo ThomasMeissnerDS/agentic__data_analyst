@@ -9,7 +9,8 @@ from ai_analyst.utils.analysis_toolkit import (
     scatter_matrix_all_numeric,
     line_plot_over_time,
     outlier_rows,
-    scatter_plot
+    scatter_plot,
+    analyze_missing_value_impact
 )
 
 __all__ = [
@@ -23,5 +24,6 @@ __all__ = [
     'scatter_matrix_all_numeric',
     'line_plot_over_time',
     'outlier_rows',
-    'scatter_plot'
+    'scatter_plot',
+    'analyze_missing_value_impact'
 ]

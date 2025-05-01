@@ -171,6 +171,7 @@ def chat_with_tools(
     8. line_plot_over_time("date_col", "value_col", agg_func="mean", freq="D") - Creates time series plot with aggregation
     9. outlier_rows("column_name", z_threshold=3.0) - Returns rows identified as outliers based on z-score
     10. scatter_plot("x_column", "y_column", hue_col="optional_color_column") - Creates a scatter plot between two columns with optional color encoding
+    11. analyze_missing_value_impact("column_name", "target_column") - Analyzes the impact of missing values in a column on regression with target variable
 
     You cannot ask for additional functions. These are the only functions you can use.
 
@@ -200,6 +201,7 @@ def chat_with_tools(
     - For boxplot_all_columns(): Explain the boxplot results
     - For correlation_matrix(): Explain the correlation matrix results
     - For scatter_plot(): Explain the scatter plot results
+    - For analyze_missing_value_impact(): Explain how different missing value treatments affect the regression results
 
     ANALYSIS STRATEGY GUIDELINES:
     1. Start with a broad overview using describe_df() to understand the data distribution
@@ -210,8 +212,9 @@ def chat_with_tools(
     6. Use groupby_aggregate() or groupby_aggregate_multi() to explore categorical relationships
     7. If you have time-series data, use line_plot_over_time() to identify trends
     8. Use outlier_rows() to investigate specific columns that show potential anomalies
-    9. Avoid repetitive analysis - if you've already examined a relationship, move on to new insights
-    10. Each iteration should focus on a different aspect of the data
+    9. Use analyze_missing_value_impact() to understand how missing values affect relationships
+    10. Avoid repetitive analysis - if you've already examined a relationship, move on to new insights
+    11. Each iteration should focus on a different aspect of the data
 
     ONLY USE THE FUNCTIONS THAT ARE LISTED ABOVE. Do not write any code that is not in this list.
     

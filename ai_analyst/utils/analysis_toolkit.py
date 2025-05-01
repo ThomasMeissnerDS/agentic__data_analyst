@@ -4,6 +4,8 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import io
 import base64
+import numpy as np
+from statsmodels.formula.api import ols
 
 
 def correlation(c1: str, c2: str):   
@@ -131,6 +133,50 @@ def scatter_plot(x_col: str, y_col: str, hue_col: str = None, figsize: tuple = (
         ax.set_title(f'Scatter Plot: {y_col} vs {x_col} (colored by {hue_col})')
     
     plt.tight_layout()
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png")
+    buf.seek(0)
+    plt.close(fig)
+    return base64.b64encode(buf.read()).decode()
+
+def analyze_missing_value_impact(column: str, target: str):
+    """Analyze the impact of missing values in a column on regression with target variable.
+    
+    Args:
+        column (str): Name of the column with missing values
+        target (str): Name of the target column for regression
+        
+    Returns:
+        str: Base64 encoded PNG image showing the regression results
+    """
+    global df
+    # Create copies of the dataframe with different missing value treatments
+    min_data_df = df.copy()
+    min_data_df[column] = np.where(min_data_df[column].isna(), min_data_df[column].min(), 
+                                 min_data_df[column])
+
+    max_data_df = df.copy()
+    max_data_df[column] = np.where(max_data_df[column].isna(), max_data_df[column].max(), 
+                                 max_data_df[column])
+
+    # Fit regression models
+    min_model = ols(f"{target}~{column}", data=min_data_df).fit()
+    max_model = ols(f"{target}~{column}", data=max_data_df).fit()
+
+    # Create visualization
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6))
+    
+    # Plot for min imputation
+    sns.regplot(x=column, y=target, data=min_data_df, ax=ax1)
+    ax1.set_title(f'Regression with Min Imputation\nR² = {min_model.rsquared:.3f}')
+    
+    # Plot for max imputation
+    sns.regplot(x=column, y=target, data=max_data_df, ax=ax2)
+    ax2.set_title(f'Regression with Max Imputation\nR² = {max_model.rsquared:.3f}')
+    
+    plt.tight_layout()
+    
+    # Convert to base64
     buf = io.BytesIO()
     fig.savefig(buf, format="png")
     buf.seek(0)
