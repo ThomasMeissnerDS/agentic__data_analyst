@@ -6,6 +6,10 @@ import io
 import base64
 import numpy as np
 from statsmodels.formula.api import ols
+from statsmodels.tsa.seasonal import seasonal_decompose
+from statsmodels.graphics.tsaplots import plot_acf
+from scipy.stats import chi2_contingency, ttest_ind, f_oneway
+from scipy.stats import probplot
 
 
 def correlation(c1: str, c2: str):   
@@ -182,3 +186,213 @@ def analyze_missing_value_impact(column: str, target: str):
     buf.seek(0)
     plt.close(fig)
     return base64.b64encode(buf.read()).decode()
+
+def histogram_plot(column: str, bins: int = 30):
+    """Create a histogram plot for a numeric column.
+    
+    Args:
+        column (str): Name of the column to plot
+        bins (int): Number of bins for the histogram
+        
+    Returns:
+        str: Base64 encoded PNG image of the histogram
+    """
+    global df
+    fig, ax = plt.subplots(figsize=(10, 6))
+    sns.histplot(data=df, x=column, bins=bins, kde=True, ax=ax)
+    ax.set_title(f'Distribution of {column}')
+    plt.tight_layout()
+    
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png")
+    buf.seek(0)
+    plt.close(fig)
+    return base64.b64encode(buf.read()).decode()
+
+def qq_plot(column: str):
+    """Create a Q-Q plot to assess normality of a numeric column.
+    
+    Args:
+        column (str): Name of the column to plot
+        
+    Returns:
+        str: Base64 encoded PNG image of the Q-Q plot
+    """
+    global df
+    fig, ax = plt.subplots(figsize=(10, 6))
+    probplot(df[column].dropna(), dist="norm", plot=ax)
+    ax.set_title(f'Q-Q Plot of {column}')
+    plt.tight_layout()
+    
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png")
+    buf.seek(0)
+    plt.close(fig)
+    return base64.b64encode(buf.read()).decode()
+
+def density_plot(column: str):
+    """Create a density plot for a numeric column.
+    
+    Args:
+        column (str): Name of the column to plot
+        
+    Returns:
+        str: Base64 encoded PNG image of the density plot
+    """
+    global df
+    fig, ax = plt.subplots(figsize=(10, 6))
+    sns.kdeplot(data=df, x=column, ax=ax)
+    ax.set_title(f'Density Plot of {column}')
+    plt.tight_layout()
+    
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png")
+    buf.seek(0)
+    plt.close(fig)
+    return base64.b64encode(buf.read()).decode()
+
+def anova_test(group_col: str, value_col: str):
+    """Perform ANOVA test to compare means across groups.
+    
+    Args:
+        group_col (str): Name of the categorical grouping column
+        value_col (str): Name of the numeric value column
+        
+    Returns:
+        dict: ANOVA test results including F-statistic and p-value
+    """
+    global df
+    groups = [group for _, group in df.groupby(group_col)[value_col]]
+    f_stat, p_value = f_oneway(*groups)
+    return {
+        'f_statistic': f_stat,
+        'p_value': p_value,
+        'significant': p_value < 0.05
+    }
+
+def chi_square_test(col1: str, col2: str):
+    """Perform chi-square test of independence between two categorical variables.
+    
+    Args:
+        col1 (str): Name of the first categorical column
+        col2 (str): Name of the second categorical column
+        
+    Returns:
+        dict: Chi-square test results including statistic and p-value
+    """
+    global df
+    contingency_table = pd.crosstab(df[col1], df[col2])
+    chi2, p, dof, expected = chi2_contingency(contingency_table)
+    return {
+        'chi2_statistic': chi2,
+        'p_value': p,
+        'degrees_of_freedom': dof,
+        'significant': p < 0.05
+    }
+
+def t_test(col1: str, col2: str):
+    """Perform independent t-test between two numeric columns.
+    
+    Args:
+        col1 (str): Name of the first numeric column
+        col2 (str): Name of the second numeric column
+        
+    Returns:
+        dict: T-test results including statistic and p-value
+    """
+    global df
+    t_stat, p_value = ttest_ind(df[col1].dropna(), df[col2].dropna())
+    return {
+        't_statistic': t_stat,
+        'p_value': p_value,
+        'significant': p_value < 0.05
+    }
+
+def seasonal_decomposition(date_col: str, value_col: str, freq: str = "D"):
+    """Perform seasonal decomposition of time series data.
+    
+    Args:
+        date_col (str): Name of the date column
+        value_col (str): Name of the value column
+        freq (str): Frequency of the time series (default: "D" for daily)
+        
+    Returns:
+        str: Base64 encoded PNG image of the decomposition plot
+    """
+    global df
+    temp = df.copy()
+    temp[date_col] = pd.to_datetime(temp[date_col])
+    temp = temp.set_index(date_col)
+    
+    decomposition = seasonal_decompose(temp[value_col], period=7 if freq == "D" else 12)
+    
+    fig, (ax1, ax2, ax3, ax4) = plt.subplots(4, 1, figsize=(12, 8))
+    decomposition.observed.plot(ax=ax1)
+    decomposition.trend.plot(ax=ax2)
+    decomposition.seasonal.plot(ax=ax3)
+    decomposition.resid.plot(ax=ax4)
+    
+    ax1.set_title('Observed')
+    ax2.set_title('Trend')
+    ax3.set_title('Seasonal')
+    ax4.set_title('Residual')
+    
+    plt.tight_layout()
+    
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png")
+    buf.seek(0)
+    plt.close(fig)
+    return base64.b64encode(buf.read()).decode()
+
+def autocorrelation_plot(column: str, lags: int = 30):
+    """Create an autocorrelation plot for time series data.
+    
+    Args:
+        column (str): Name of the time series column
+        lags (int): Number of lags to plot
+        
+    Returns:
+        str: Base64 encoded PNG image of the autocorrelation plot
+    """
+    global df
+    fig, ax = plt.subplots(figsize=(10, 6))
+    plot_acf(df[column].dropna(), lags=lags, ax=ax)
+    ax.set_title(f'Autocorrelation Plot of {column}')
+    plt.tight_layout()
+    
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png")
+    buf.seek(0)
+    plt.close(fig)
+    return base64.b64encode(buf.read()).decode()
+
+def create_interaction(col1: str, col2: str):
+    """Create an interaction term between two numeric columns.
+    
+    Args:
+        col1 (str): Name of the first numeric column
+        col2 (str): Name of the second numeric column
+        
+    Returns:
+        str: Name of the new interaction column
+    """
+    global df
+    interaction_name = f"{col1}_x_{col2}"
+    df[interaction_name] = df[col1] * df[col2]
+    return interaction_name
+
+def bin_numeric_column(column: str, bins: int = 5):
+    """Create bins for a numeric column.
+    
+    Args:
+        column (str): Name of the numeric column
+        bins (int): Number of bins to create
+        
+    Returns:
+        str: Name of the new binned column
+    """
+    global df
+    binned_name = f"{column}_binned"
+    df[binned_name] = pd.qcut(df[column], q=bins, labels=[f"bin_{i+1}" for i in range(bins)])
+    return binned_name

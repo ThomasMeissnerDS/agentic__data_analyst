@@ -10,7 +10,17 @@ from ai_analyst.utils.analysis_toolkit import (
     line_plot_over_time,
     outlier_rows,
     scatter_plot,
-    analyze_missing_value_impact
+    analyze_missing_value_impact,
+    histogram_plot,
+    qq_plot,
+    density_plot,
+    anova_test,
+    chi_square_test,
+    t_test,
+    seasonal_decomposition,
+    autocorrelation_plot,
+    create_interaction,
+    bin_numeric_column
 )
 
 __all__ = [
@@ -25,5 +35,15 @@ __all__ = [
     'line_plot_over_time',
     'outlier_rows',
     'scatter_plot',
-    'analyze_missing_value_impact'
+    'analyze_missing_value_impact',
+    'histogram_plot',
+    'qq_plot',
+    'density_plot',
+    'anova_test',
+    'chi_square_test',
+    't_test',
+    'seasonal_decomposition',
+    'autocorrelation_plot',
+    'create_interaction',
+    'bin_numeric_column'
 ]

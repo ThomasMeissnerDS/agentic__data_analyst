@@ -204,6 +204,16 @@ def chat_with_tools(
     9. outlier_rows("column_name", z_threshold=3.0) - Returns rows identified as outliers based on z-score
     10. scatter_plot("x_column", "y_column", hue_col="optional_color_column") - Creates a scatter plot between two columns with optional color encoding
     11. analyze_missing_value_impact("column_name", "target_column") - Analyzes the impact of missing values in a column on regression with target variable
+    12. histogram_plot("column_name", bins=30) - Creates a histogram with KDE for a numeric column
+    13. qq_plot("column_name") - Creates a Q-Q plot to assess normality of a numeric column
+    14. density_plot("column_name") - Creates a density plot for a numeric column
+    15. anova_test("group_column", "value_column") - Performs ANOVA test to compare means across groups
+    16. chi_square_test("categorical_col1", "categorical_col2") - Performs chi-square test of independence between categorical variables
+    17. t_test("numeric_col1", "numeric_col2") - Performs independent t-test between two numeric columns
+    18. seasonal_decomposition("date_col", "value_col", freq="D") - Performs seasonal decomposition of time series data
+    19. autocorrelation_plot("column_name", lags=30) - Creates an autocorrelation plot for time series data
+    20. create_interaction("numeric_col1", "numeric_col2") - Creates an interaction term between two numeric columns
+    21. bin_numeric_column("column_name", bins=5) - Creates bins for a numeric column
 
     You cannot ask for additional functions. These are the only functions you can use.
 
@@ -234,6 +244,16 @@ def chat_with_tools(
     - For correlation_matrix(): Explain the correlation matrix results
     - For scatter_plot(): Explain the scatter plot results
     - For analyze_missing_value_impact(): Explain how different missing value treatments affect the regression results
+    - For histogram_plot(): Explain the distribution shape, modality, and any skewness
+    - For qq_plot(): Explain the normality of the distribution and any deviations
+    - For density_plot(): Explain the probability density and any peaks or modes
+    - For anova_test(): Explain the significance of group differences and effect size
+    - For chi_square_test(): Explain the relationship between categorical variables
+    - For t_test(): Explain the significance of mean differences between groups
+    - For seasonal_decomposition(): Explain the trend, seasonality, and residual patterns
+    - For autocorrelation_plot(): Explain the temporal dependencies and patterns
+    - For create_interaction(): Explain the new interaction feature created
+    - For bin_numeric_column(): Explain the binning strategy and distribution
 
     ANALYSIS STRATEGY GUIDELINES:
     1. Start with functions that give a broad overview of the data
@@ -245,8 +265,14 @@ def chat_with_tools(
     7. If you have time-series data, use line_plot_over_time() to identify trends
     8. Use outlier_rows() to investigate specific columns that show potential anomalies
     9. Use analyze_missing_value_impact() to understand how missing values affect relationships
-    10. Avoid repetitive analysis - if you've already examined a relationship, move on to new insights
-    11. Each iteration should focus on a different aspect of the data
+    10. Use histogram_plot(), qq_plot(), and density_plot() to understand the distribution of numeric variables
+    11. Use anova_test() and t_test() to compare means across groups
+    12. Use chi_square_test() to analyze relationships between categorical variables
+    13. For time series data, use seasonal_decomposition() and autocorrelation_plot() to understand patterns
+    14. Use create_interaction() to explore potential interaction effects
+    15. Use bin_numeric_column() to discretize continuous variables when appropriate
+    16. Avoid repetitive analysis - if you've already examined a relationship, move on to new insights
+    17. Each iteration should focus on a different aspect of the data
 
     ONLY USE THE FUNCTIONS THAT ARE LISTED ABOVE. Do not write any code that is not in this list.
     
