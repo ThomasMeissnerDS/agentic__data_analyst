@@ -253,7 +253,16 @@ def chat_with_tools(
         time.sleep(sleep_secs)
 
         _, summary = summarize_conversation(conversation_log)
-        next_msg = f"Conversation so far (summary):\n{summary}\n\n{tool_info}\n\nContinue with your analysis, making sure to interpret any visualizations or statistical results."
+        suggestions_text = "\n".join(f"- {s}" for s in suggestions) if suggestions else "No specific suggestions provided."
+        next_msg = f"""Conversation so far (summary):
+{summary}
+
+Decider's suggestions for further analysis:
+{suggestions_text}
+
+{tool_info}
+
+Please continue your analysis, focusing on the suggested areas if provided. Make sure to interpret any visualizations or statistical results."""
         model_text = chat.send_message(next_msg, config=config).text
 
     save_conversation_to_pdf(conversation_log, pdf_path, config)
