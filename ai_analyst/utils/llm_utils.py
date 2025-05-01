@@ -274,6 +274,8 @@ def chat_with_tools(
         if post:
             conversation_log.append(("LLM", post)); final_answer += post + "\n"
 
+        print(f"Conversation log (iter {iterations}):", conversation_log)
+
         cont, decider_txt, suggestions = decide_if_continue_or_not(
             latest_text=model_text,
             client=client,
