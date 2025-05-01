@@ -79,13 +79,34 @@ def decide_if_continue_or_not(
         config: AnalysisConfig = None):
     decider_chat = client.chats.create(model=model_id)
     decider_prompt = (
-        "You are the DECIDER LLM. Analyse the following Analyst‑LLM output:\n\n"
+        "You are the DECIDER LLM. Your role is to guide the analysis process by:\n"
+        "1. Evaluating the current analysis progress\n"
+        "2. Suggesting specific areas for further investigation\n"
+        "3. Providing clear directions for the next analysis steps\n\n"
+        "Analyze the following Analyst-LLM output:\n\n"
         f"{latest_text}\n\n"
-        "Should the Analyst continue? Reply \"no\" if we are finished, otherwise say anything else.\n\n"
+        "Provide your response in this format:\n"
+        "CONTINUE: [yes/no]\n"
+        "SUGGESTIONS:\n"
+        "- [Specific analysis suggestion 1]\n"
+        "- [Specific analysis suggestion 2]\n"
+        "...\n\n"
         f"(Remember: data already loaded as df about {data_about} with columns {list(df.columns)})"
     )
     decider_reply = decider_chat.send_message(decider_prompt, config=config).text.strip()
-    return decider_reply.lower() != "no", decider_reply
+    
+    # Parse the decider's response
+    continue_analysis = False
+    suggestions = []
+    
+    lines = decider_reply.split('\n')
+    for line in lines:
+        if line.startswith('CONTINUE:'):
+            continue_analysis = 'yes' in line.lower()
+        elif line.startswith('-'):
+            suggestions.append(line[1:].strip())
+    
+    return continue_analysis, decider_reply, suggestions
 
 
 def run_tool_code(code_str: str, conversation_log: list, tmp_dir: str):
@@ -217,7 +238,7 @@ def chat_with_tools(
         if post:
             conversation_log.append(("LLM", post)); final_answer += post + "\n"
 
-        cont, decider_txt = decide_if_continue_or_not(
+        cont, decider_txt, suggestions = decide_if_continue_or_not(
             latest_text=model_text,
             client=client,
             model_id=model_id,
