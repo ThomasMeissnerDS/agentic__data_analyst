@@ -363,10 +363,11 @@ def chat_with_tools(
         time.sleep(sleep_secs)
         
         # Create meaningful summary every 5 iterations
-        if iterations % 5 == 0:
-            summary = create_meaningful_summary(conversation_log, client, model_id, config)
-            # Keep only the last 3 items and add the summary
-            conversation_log = conversation_log[-3:] + [("SUMMARY", summary)]
+        summary = create_meaningful_summary(conversation_log, client, model_id, config)
+        # Keep only the last 3 items and add the summary
+        conversation_log = conversation_log[-3:] + [("SUMMARY", summary)]
+        print(f"Summary (iter {iterations}):", summary)
+        # TODO: We might need to always keep a full log of the conversation as well to pass this to the PDF generator
             
         # Prepare next message with suggestions and context
         context = f"Previous analysis summary:\n{conversation_log[-1][1]}\n\n" if len(conversation_log) > 0 else ""
