@@ -91,6 +91,7 @@ def decide_if_continue_or_not(
         "- [Specific analysis suggestion 1]\n"
         "- [Specific analysis suggestion 2]\n"
         "...\n\n"
+        "Think step-by-step, but only keep a minimum draft for each thinking step.\n"
         f"(Remember: data already loaded as df about {data_about} with columns {list(df.columns)})"
     )
     decider_reply = decider_chat.send_message(decider_prompt, config=config).text.strip()
