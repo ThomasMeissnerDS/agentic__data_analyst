@@ -91,7 +91,22 @@ def decide_if_continue_or_not(
         "- [Specific analysis suggestion 1]\n"
         "- [Specific analysis suggestion 2]\n"
         "...\n\n"
-        "Think step-by-step, but only keep a minimum draft for each thinking step.\n"
+        
+        
+        """
+        The analyst has these Python tool functions available:
+        1. correlation("column1_name", "column2_name") - Returns correlation coefficient between two columns
+        2. groupby_aggregate("groupby_column", "agg_column", "agg_func") - Groups data and applies aggregation function
+        3. groupby_aggregate_multi(["groupby_col1", "groupby_col2"], {{"agg_col": "agg_func"}}) - Groups by multiple columns and applies multiple aggregations
+        4. filter_data("column_name", "operator", value) - Returns filtered dataframe based on condition
+        5. boxplot_all_columns() - Creates boxplots for all numeric columns
+        6. correlation_matrix() - Returns correlation matrix for all numeric columns
+        7. scatter_matrix_all_numeric() - Creates scatter plots between all numeric columns
+        8. line_plot_over_time("date_col", "value_col", agg_func="mean", freq="D") - Creates time series plot with aggregation
+        9. outlier_rows("column_name", z_threshold=3.0) - Returns rows identified as outliers based on z-score
+        10. scatter_plot("x_column", "y_column", hue_col="optional_color_column") - Creates a scatter plot between two columns with optional color encoding \n
+        """
+
         f"(Remember: data already loaded as df about {data_about} with columns {list(df.columns)})"
     )
     decider_reply = decider_chat.send_message(decider_prompt, config=config).text.strip()

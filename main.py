@@ -27,7 +27,7 @@ if __name__ == "__main__":
         tmp_dir="/home/thomas/Downloads/_plots",
         font_output_dir="/home/thomas/Downloads/_fonts",
         default_font_path="/home/thomas/Downloads/DejaVuSans-Bold.ttf",
-        max_iterations=5
+        max_iterations=4
     )
 
     _validate_pdf_requirements(ai_cfg)
