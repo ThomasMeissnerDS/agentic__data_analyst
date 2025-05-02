@@ -210,10 +210,11 @@ def create_meaningful_summary(
     2. Add any new insights from the latest step
     3. Update the analysis progress
     4. Keep the summary focused on the most significant findings
+    5. Be concise and under 100 words total
     
     Format your response as:
     SUMMARY:
-    [Your updated summary here]
+    [Your updated summary here - must be under 100 words]
     
     KEY FINDINGS:
     - [Key finding 1]
@@ -222,7 +223,28 @@ def create_meaningful_summary(
     """
     
     response = summary_chat.send_message(summary_prompt, config=config)
-    return response.text.strip()
+    summary_text = response.text.strip()
+    
+    # Extract the summary part
+    summary_lines = summary_text.split('\n')
+    summary = ""
+    for line in summary_lines:
+        if line.startswith('SUMMARY:'):
+            summary = line[8:].strip()
+            break
+    
+    # If no summary found, use the first line
+    if not summary:
+        summary = summary_lines[0]
+    
+    # Truncate if over 100 words
+    words = summary.split()
+    if len(words) > 100:
+        truncated_summary = ' '.join(words[:100])
+        print(f"Warning: Summary truncated from {len(words)} to 100 words")
+        return truncated_summary
+    
+    return summary
 
 
 def chat_with_tools(
