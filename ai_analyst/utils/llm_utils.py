@@ -105,7 +105,7 @@ def decide_if_continue_or_not(
         f"{latest_text}\n\n"
         "Provide your response in this format:\n"
         "CONTINUE: [yes/no]\n"
-        "SUGGESTIONS:\n"
+        "SUGGESTIONS (add a maximum of 3):\n"
         "- [Specific analysis suggestion 1]\n"
         "- [Specific analysis suggestion 2]\n"
         "...\n\n"
@@ -124,7 +124,8 @@ def decide_if_continue_or_not(
         10. scatter_plot("x_column", "y_column", hue_col="optional_color_column") - Creates a scatter plot between two columns with optional color encoding \n
         """
 
-        f"(Remember: data already loaded as df about {data_about})"
+        f"(Remember: data already loaded as df about {data_about})\n"
+        "Important: Keep your answer concise as we have limited GPU memory to process your answer!\n"
     )
     decider_reply = decider_chat.send_message(decider_prompt, config=config).text.strip()
     
@@ -377,8 +378,7 @@ def chat_with_tools(
                 model_text = chat.send_message(next_msg, config=config).text
                 continue
             # Update summary with the tool call and output
-            current_summary = create_meaningful_summary(("TOOL_CODE", code_block), current_summary, client, model_id, config)
-            current_summary = create_meaningful_summary(("TOOL", tool_out), current_summary, client, model_id, config)
+            current_summary = create_meaningful_summary(("TOOL", model_text), current_summary, client, model_id, config)
             
         if post:
             conversation_log.append(("LLM", post))
@@ -400,7 +400,7 @@ def chat_with_tools(
         )
         conversation_log.append(("DECIDER", decider_txt))
         # Update summary with the decision
-        current_summary = create_meaningful_summary(("DECIDER", decider_txt), current_summary, client, model_id, config)
+        current_summary = create_meaningful_summary(("DECIDER", decider_txt + "\n".join([f"- {s}" for s in suggestions])), current_summary, client, model_id, config)
         
         if not cont or iterations >= config.max_iterations:
             break
@@ -409,7 +409,7 @@ def chat_with_tools(
         
         # Prepare next message with context and suggestions
         context = f"Analysis Summary:\n{current_summary}\n\n"
-        next_msg = f"{context}Previous suggestions:\n" + "\n".join([f"- {s}" for s in suggestions]) + "\n\n" + tool_info
+        next_msg = f"{context}Previous suggestions:\n" + "\n\n" + tool_info
         model_text = chat.send_message(next_msg, config=config).text
 
     save_conversation_to_pdf(conversation_log, pdf_path, config)
