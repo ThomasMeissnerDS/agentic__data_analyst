@@ -101,15 +101,6 @@ def decide_if_continue_or_not(
         decider_prompt += "No previous tool calls have been made.\n\n"
     
     decider_prompt += (
-        "Analyze the following Analyst-LLM output:\n\n"
-        f"{latest_text}\n\n"
-        "Provide your response in this format:\n"
-        "CONTINUE: [yes/no]\n"
-        "SUGGESTIONS:\n"
-        "- [Specific analysis suggestion 1]\n"
-        "- [Specific analysis suggestion 2]\n"
-        "...\n\n"
-        
         """
         The analyst has these Python tool functions available:
         1. correlation("column1_name", "column2_name") - Returns correlation coefficient between two columns
@@ -121,23 +112,64 @@ def decide_if_continue_or_not(
         7. scatter_matrix_all_numeric() - Creates scatter plots between all numeric columns
         8. line_plot_over_time("date_col", "value_col", agg_func="mean", freq="D") - Creates time series plot with aggregation
         9. outlier_rows("column_name", z_threshold=3.0) - Returns rows identified as outliers based on z-score
-        10. scatter_plot("x_column", "y_column", hue_col="optional_color_column") - Creates a scatter plot between two columns with optional color encoding \n
+        10. scatter_plot("x_column", "y_column", hue_col="optional_color_column") - Creates a scatter plot between two columns with optional color encoding
+        11. analyze_missing_value_impact("column_name", "target_column") - Analyzes the impact of missing values in a column on regression with target variable
+        12. histogram_plot("column_name", bins=30) - Creates a histogram with KDE for a numeric column
+        13. qq_plot("column_name") - Creates a Q-Q plot to assess normality of a numeric column
+        14. density_plot("column_name") - Creates a density plot for a numeric column
+        15. anova_test("group_column", "value_column") - Performs ANOVA test to compare means across groups
+        16. chi_square_test("categorical_col1", "categorical_col2") - Performs chi-square test of independence between categorical variables
+        17. t_test("numeric_col1", "numeric_col2") - Performs independent t-test between two numeric columns
+        18. seasonal_decomposition("date_col", "value_col", freq="D") - Performs seasonal decomposition of time series data
+        19. autocorrelation_plot("column_name", lags=30) - Creates an autocorrelation plot for time series data
+        20. create_interaction("numeric_col1", "numeric_col2") - Creates an interaction term between two numeric columns
+        21. bin_numeric_column("column_name", bins=5) - Creates bins for a numeric column \n
         """
 
-        f"(Remember: data already loaded as df about {data_about})"
+        f"(Remember: data already loaded as df about {data_about})\n"
+
+        "Analyze the following Analyst-LLM output:\n\n"
+        f"{latest_text}\n\n"
+        "Provide your response in this format:\n"
+        "CONTINUE: [yes/no]\n"
+        "SUGGESTIONS (add a maximum of 3):\n"
+        "- [Specific analysis suggestion 1]\n"
+        "- [Specific analysis suggestion 2]\n"
+        "...\n\n"
+        "Important: Keep your answer concise as we have limited GPU memory to process your answer!\n"
+        "The CONTINUE part is always mandatory though. As we aim for a deep analysis, do not stop the analysis too early.\n"
+        "Make sure that CONTINUE has to be at the start of the line. Otherwise the parsing will lead to wrong results.\n"
+        "If in doubt return CONTINUE: yes\n"
     )
     decider_reply = decider_chat.send_message(decider_prompt, config=config).text.strip()
     
     # Parse the decider's response
-    continue_analysis = False
+    continue_analysis = True  # Default to True to avoid early stops
     suggestions = []
     
     lines = decider_reply.split('\n')
+    found_continue = False
+    
     for line in lines:
-        if line.startswith('CONTINUE:'):
-            continue_analysis = 'yes' in line.lower()
+        line = line.strip()
+        if not line:
+            continue
+            
+        # More flexible CONTINUE parsing
+        if line.lower().startswith('continue:'):
+            found_continue = True
+            # Extract the value after CONTINUE:
+            value = line[8:].strip().lower()
+            # Only set to False if explicitly "no"
+            continue_analysis = value != 'no'
+            print(f"Decider CONTINUE parsing: line='{line}', value='{value}', continue_analysis={continue_analysis}")
         elif line.startswith('-'):
             suggestions.append(line[1:].strip())
+    
+    # If no CONTINUE line was found, log a warning but keep continue_analysis as True
+    if not found_continue:
+        print(f"Warning: No CONTINUE line found in decider response. Defaulting to continue_analysis=True")
+        print(f"Full decider response:\n{decider_reply}")
     
     return continue_analysis, decider_reply, suggestions
 
@@ -173,6 +205,80 @@ def run_tool_code(code_str: str, conversation_log: list, tmp_dir: str):
     return f"```tool_output\n{out_txt.strip()}\n```"
 
 
+def create_meaningful_summary(
+        current_step: tuple,  # (kind, content) of current step
+        previous_summary: str,  # Previous summary to build upon
+        client: _DummyClient, 
+        model_id: str, 
+        config: AnalysisConfig
+    ) -> str:
+    """Create or update a meaningful summary of the analysis using an LLM."""
+    summary_chat = client.chats.create(model=model_id)
+    
+    # Format the current step for summarization
+    kind, content = current_step
+    if kind == "LLM":
+        current_step_text = f"Analyst: {content}"
+    elif kind == "TOOL_CODE":
+        current_step_text = f"Tool Call: {content}"
+    elif kind == "TOOL":
+        current_step_text = f"Tool Output: {content}"
+    elif kind == "DECIDER":
+        current_step_text = f"Decision: {content}"
+    else:
+        current_step_text = f"{kind}: {content}"
+    
+    summary_prompt = f"""
+    You are a data analysis summarizer. Your task is to update the analysis summary with the latest step.
+    
+    Here is the current summary of the analysis so far:
+    {previous_summary}
+    
+    Here is the latest step in the analysis:
+    {current_step_text}
+    
+    Please update the summary to incorporate this new information. Your updated summary should:
+    1. Maintain the key insights discovered so far
+    2. Add any new insights from the latest step
+    3. Update the analysis progress
+    4. Keep the summary focused on the most significant findings
+    5. Be concise and under 100 words total
+    
+    Format your response as:
+    SUMMARY:
+    [Your updated summary here - must be under 100 words]
+    
+    KEY FINDINGS:
+    - [Key finding 1]
+    - [Key finding 2]
+    ...
+    """
+    
+    response = summary_chat.send_message(summary_prompt, config=config)
+    summary_text = response.text.strip()
+    
+    # Extract the summary part
+    summary_lines = summary_text.split('\n')
+    summary = ""
+    for line in summary_lines:
+        if line.startswith('SUMMARY:'):
+            summary = line[8:].strip()
+            break
+    
+    # If no summary found, use the first line
+    if not summary:
+        summary = summary_lines[0]
+    
+    # Truncate if over 100 words
+    words = summary.split()
+    if len(words) > 100:
+        truncated_summary = ' '.join(words[:100])
+        print(f"Warning: Summary truncated from {len(words)} to 100 words")
+        return truncated_summary
+    
+    return summary
+
+
 def chat_with_tools(
         user_message: str,
         client: _DummyClient,
@@ -187,7 +293,8 @@ def chat_with_tools(
         config: AnalysisConfig = None,
         df: pd.DataFrame = None,
         ) -> str:
-    conversation_log = []
+    conversation_log = []  # Full conversation log for PDF generation
+    current_summary = ""   # Growing summary of the analysis
     chat = client.chats.create(model=model_id)
 
     # Create the tool information string that will be included in every message
@@ -204,6 +311,16 @@ def chat_with_tools(
     9. outlier_rows("column_name", z_threshold=3.0) - Returns rows identified as outliers based on z-score
     10. scatter_plot("x_column", "y_column", hue_col="optional_color_column") - Creates a scatter plot between two columns with optional color encoding
     11. analyze_missing_value_impact("column_name", "target_column") - Analyzes the impact of missing values in a column on regression with target variable
+    12. histogram_plot("column_name", bins=30) - Creates a histogram with KDE for a numeric column
+    13. qq_plot("column_name") - Creates a Q-Q plot to assess normality of a numeric column
+    14. density_plot("column_name") - Creates a density plot for a numeric column
+    15. anova_test("group_column", "value_column") - Performs ANOVA test to compare means across groups
+    16. chi_square_test("categorical_col1", "categorical_col2") - Performs chi-square test of independence between categorical variables
+    17. t_test("numeric_col1", "numeric_col2") - Performs independent t-test between two numeric columns
+    18. seasonal_decomposition("date_col", "value_col", freq="D") - Performs seasonal decomposition of time series data
+    19. autocorrelation_plot("column_name", lags=30) - Creates an autocorrelation plot for time series data
+    20. create_interaction("numeric_col1", "numeric_col2") - Creates an interaction term between two numeric columns
+    21. bin_numeric_column("column_name", bins=5) - Creates bins for a numeric column
 
     You cannot ask for additional functions. These are the only functions you can use.
 
@@ -234,6 +351,16 @@ def chat_with_tools(
     - For correlation_matrix(): Explain the correlation matrix results
     - For scatter_plot(): Explain the scatter plot results
     - For analyze_missing_value_impact(): Explain how different missing value treatments affect the regression results
+    - For histogram_plot(): Explain the distribution shape, modality, and any skewness
+    - For qq_plot(): Explain the normality of the distribution and any deviations
+    - For density_plot(): Explain the probability density and any peaks or modes
+    - For anova_test(): Explain the significance of group differences and effect size
+    - For chi_square_test(): Explain the relationship between categorical variables
+    - For t_test(): Explain the significance of mean differences between groups
+    - For seasonal_decomposition(): Explain the trend, seasonality, and residual patterns
+    - For autocorrelation_plot(): Explain the temporal dependencies and patterns
+    - For create_interaction(): Explain the new interaction feature created
+    - For bin_numeric_column(): Explain the binning strategy and distribution
 
     ANALYSIS STRATEGY GUIDELINES:
     1. Start with functions that give a broad overview of the data
@@ -245,8 +372,14 @@ def chat_with_tools(
     7. If you have time-series data, use line_plot_over_time() to identify trends
     8. Use outlier_rows() to investigate specific columns that show potential anomalies
     9. Use analyze_missing_value_impact() to understand how missing values affect relationships
-    10. Avoid repetitive analysis - if you've already examined a relationship, move on to new insights
-    11. Each iteration should focus on a different aspect of the data
+    10. Use histogram_plot(), qq_plot(), and density_plot() to understand the distribution of numeric variables
+    11. Use anova_test() and t_test() to compare means across groups
+    12. Use chi_square_test() to analyze relationships between categorical variables
+    13. For time series data, use seasonal_decomposition() and autocorrelation_plot() to understand patterns
+    14. Use create_interaction() to explore potential interaction effects
+    15. Use bin_numeric_column() to discretize continuous variables when appropriate
+    16. Avoid repetitive analysis - if you've already examined a relationship, move on to new insights
+    17. Each iteration should focus on a different aspect of the data
 
     ONLY USE THE FUNCTIONS THAT ARE LISTED ABOVE. Do not write any code that is not in this list.
     
@@ -257,13 +390,19 @@ def chat_with_tools(
     initial_message = user_message + tool_info
     response = chat.send_message(initial_message, config=config)
     model_text = response.text
+    current_summary = ""
     final_answer, iterations = "", 0
 
     while True:
         pre, code_block, post = extract_text_and_code(model_text)
 
         if pre:
-            conversation_log.append(("LLM", pre)); final_answer += pre + "\n"
+            conversation_log.append(("LLM", pre))
+            final_answer += pre + "\n"
+            # Update summary with the new content
+            current_summary = create_meaningful_summary(("LLM", pre), current_summary, client, model_id, config)
+            print(f"Pre-text current_summary (iter {iterations}):", current_summary)
+            
         if code_block:
             tool_out = run_tool_code(code_block, conversation_log, tmp_dir)
             # Add a reminder for interpretation if the tool output is a visualization
@@ -271,10 +410,19 @@ def chat_with_tools(
                 next_msg = f"Tool output:\n{tool_out}\n\n{tool_info}\n\nPlease provide a detailed interpretation of these results. Focus on key insights and patterns."
                 model_text = chat.send_message(next_msg, config=config).text
                 continue
+            # Update summary with the tool call and output
+            current_summary = create_meaningful_summary(("TOOL", model_text), current_summary, client, model_id, config)
+            print(f"Tool call current_summary (iter {iterations}):", current_summary)
+            
         if post:
-            conversation_log.append(("LLM", post)); final_answer += post + "\n"
+            conversation_log.append(("LLM", post))
+            final_answer += post + "\n"
+            # Update summary with the new content
+            current_summary = create_meaningful_summary(("LLM", post), current_summary, client, model_id, config)
+            print(f"Post-text current_summary (iter {iterations}):", current_summary)
 
         print(f"Conversation log (iter {iterations}):", conversation_log)
+        print(f"Current summary (iter {iterations}):", current_summary)
 
         cont, decider_txt, suggestions = decide_if_continue_or_not(
             latest_text=model_text,
@@ -282,17 +430,22 @@ def chat_with_tools(
             model_id=model_id,
             data_about=data_about,
             df=df,
-            conversation_log=conversation_log,
+            conversation_log=[("LLM", current_summary)],
             config=config
         )
         conversation_log.append(("DECIDER", decider_txt))
-        if not cont or iterations >= config.max_iterations:
+        # Update summary with the decision
+        current_summary = create_meaningful_summary(("DECIDER", decider_txt + "\n".join([f"- {s}" for s in suggestions])), current_summary, client, model_id, config)
+        
+        if not cont and iterations >= config.max_iterations:
+            print(f"Max iterations reached or decision to stop analysis: decision: {cont}, iteration: {iterations}")
             break
         iterations += 1
         time.sleep(sleep_secs)
         
-        # Prepare next message with suggestions
-        next_msg = f"Previous suggestions:\n" + "\n".join([f"- {s}" for s in suggestions]) + "\n\n" + tool_info
+        # Prepare next message with context and suggestions
+        context = f"Analysis Summary:\n{current_summary}\n\n"
+        next_msg = f"{context}Previous suggestions:\n" + "\n\n" + tool_info
         model_text = chat.send_message(next_msg, config=config).text
 
     save_conversation_to_pdf(conversation_log, pdf_path, config)
