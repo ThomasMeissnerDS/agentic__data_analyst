@@ -101,15 +101,6 @@ def decide_if_continue_or_not(
         decider_prompt += "No previous tool calls have been made.\n\n"
     
     decider_prompt += (
-        "Analyze the following Analyst-LLM output:\n\n"
-        f"{latest_text}\n\n"
-        "Provide your response in this format:\n"
-        "CONTINUE: [yes/no]\n"
-        "SUGGESTIONS (add a maximum of 3):\n"
-        "- [Specific analysis suggestion 1]\n"
-        "- [Specific analysis suggestion 2]\n"
-        "...\n\n"
-        
         """
         The analyst has these Python tool functions available:
         1. correlation("column1_name", "column2_name") - Returns correlation coefficient between two columns
@@ -121,11 +112,31 @@ def decide_if_continue_or_not(
         7. scatter_matrix_all_numeric() - Creates scatter plots between all numeric columns
         8. line_plot_over_time("date_col", "value_col", agg_func="mean", freq="D") - Creates time series plot with aggregation
         9. outlier_rows("column_name", z_threshold=3.0) - Returns rows identified as outliers based on z-score
-        10. scatter_plot("x_column", "y_column", hue_col="optional_color_column") - Creates a scatter plot between two columns with optional color encoding \n
+        10. scatter_plot("x_column", "y_column", hue_col="optional_color_column") - Creates a scatter plot between two columns with optional color encoding
+        11. analyze_missing_value_impact("column_name", "target_column") - Analyzes the impact of missing values in a column on regression with target variable
+        12. histogram_plot("column_name", bins=30) - Creates a histogram with KDE for a numeric column
+        13. qq_plot("column_name") - Creates a Q-Q plot to assess normality of a numeric column
+        14. density_plot("column_name") - Creates a density plot for a numeric column
+        15. anova_test("group_column", "value_column") - Performs ANOVA test to compare means across groups
+        16. chi_square_test("categorical_col1", "categorical_col2") - Performs chi-square test of independence between categorical variables
+        17. t_test("numeric_col1", "numeric_col2") - Performs independent t-test between two numeric columns
+        18. seasonal_decomposition("date_col", "value_col", freq="D") - Performs seasonal decomposition of time series data
+        19. autocorrelation_plot("column_name", lags=30) - Creates an autocorrelation plot for time series data
+        20. create_interaction("numeric_col1", "numeric_col2") - Creates an interaction term between two numeric columns
+        21. bin_numeric_column("column_name", bins=5) - Creates bins for a numeric column \n
         """
 
         f"(Remember: data already loaded as df about {data_about})\n"
-        "Important: Keep your answer concise as we have limited GPU memory to process your answer!\n"
+
+        "Analyze the following Analyst-LLM output:\n\n"
+        f"{latest_text}\n\n"
+        "Provide your response in this format:\n"
+        "CONTINUE: [yes/no]\n"
+        "SUGGESTIONS (add a maximum of 3):\n"
+        "- [Specific analysis suggestion 1]\n"
+        "- [Specific analysis suggestion 2]\n"
+        "...\n\n"
+        "Important: Keep your answer concise as we have limited GPU memory to process your answer! The CONTINUE part is always mandatory though.\n"
     )
     decider_reply = decider_chat.send_message(decider_prompt, config=config).text.strip()
     
@@ -359,6 +370,7 @@ def chat_with_tools(
     initial_message = user_message + tool_info
     response = chat.send_message(initial_message, config=config)
     model_text = response.text
+    current_summary = ""
     final_answer, iterations = "", 0
 
     while True:
@@ -369,6 +381,7 @@ def chat_with_tools(
             final_answer += pre + "\n"
             # Update summary with the new content
             current_summary = create_meaningful_summary(("LLM", pre), current_summary, client, model_id, config)
+            print(f"Pre-text current_summary (iter {iterations}):", current_summary)
             
         if code_block:
             tool_out = run_tool_code(code_block, conversation_log, tmp_dir)
@@ -379,12 +392,14 @@ def chat_with_tools(
                 continue
             # Update summary with the tool call and output
             current_summary = create_meaningful_summary(("TOOL", model_text), current_summary, client, model_id, config)
+            print(f"Tool call current_summary (iter {iterations}):", current_summary)
             
         if post:
             conversation_log.append(("LLM", post))
             final_answer += post + "\n"
             # Update summary with the new content
             current_summary = create_meaningful_summary(("LLM", post), current_summary, client, model_id, config)
+            print(f"Post-text current_summary (iter {iterations}):", current_summary)
 
         print(f"Conversation log (iter {iterations}):", conversation_log)
         print(f"Current summary (iter {iterations}):", current_summary)
@@ -395,7 +410,7 @@ def chat_with_tools(
             model_id=model_id,
             data_about=data_about,
             df=df,
-            conversation_log=conversation_log,
+            conversation_log=[("LLM", current_summary)],
             config=config
         )
         conversation_log.append(("DECIDER", decider_txt))
@@ -403,6 +418,7 @@ def chat_with_tools(
         current_summary = create_meaningful_summary(("DECIDER", decider_txt + "\n".join([f"- {s}" for s in suggestions])), current_summary, client, model_id, config)
         
         if not cont or iterations >= config.max_iterations:
+            print(f"Max iterations reached or decision to stop analysis: decision: {cont}, iteration: {iterations}")
             break
         iterations += 1
         time.sleep(sleep_secs)
