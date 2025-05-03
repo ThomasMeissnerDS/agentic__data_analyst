@@ -137,7 +137,8 @@ def decide_if_continue_or_not(
         "- [Specific analysis suggestion 2]\n"
         "...\n\n"
         "Important: Keep your answer concise as we have limited GPU memory to process your answer!\n"
-        "The CONTINUE part is always mandatory though. As we aim for a deep analysis, do not stop te analysis too early."
+        "The CONTINUE part is always mandatory though. As we aim for a deep analysis, do not stop the analysis too early.\n"
+        "Make sure that CONTINUE has to be at the start of the line. Otherwise the parsing will lead to wrong results.\n"
         "If in doubt return CONTINUE: yes\n"
     )
     decider_reply = decider_chat.send_message(decider_prompt, config=config).text.strip()
@@ -419,7 +420,7 @@ def chat_with_tools(
         # Update summary with the decision
         current_summary = create_meaningful_summary(("DECIDER", decider_txt + "\n".join([f"- {s}" for s in suggestions])), current_summary, client, model_id, config)
         
-        if not cont or iterations >= config.max_iterations:
+        if not cont and iterations >= config.max_iterations:
             print(f"Max iterations reached or decision to stop analysis: decision: {cont}, iteration: {iterations}")
             break
         iterations += 1
