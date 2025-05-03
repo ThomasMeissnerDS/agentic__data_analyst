@@ -137,7 +137,8 @@ def decide_if_continue_or_not(
         "- [Specific analysis suggestion 2]\n"
         "...\n\n"
         "Important: Keep your answer concise as we have limited GPU memory to process your answer!\n"
-        "The CONTINUE part is always mandatory though. As we aim for a deep analysis, do not stop te analysis too early.\n"
+        "The CONTINUE part is always mandatory though. As we aim for a deep analysis, do not stop te analysis too early."
+        "If in doubt return CONTINUE: yes\n"
     )
     decider_reply = decider_chat.send_message(decider_prompt, config=config).text.strip()
     
