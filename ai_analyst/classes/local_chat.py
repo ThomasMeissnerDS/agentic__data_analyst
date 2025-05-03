@@ -12,6 +12,7 @@ class LocalChat:
         self.messages = []
         if system_prompt:
             self.messages.append({"role": "system", "content": _txt(system_prompt)})
+        self.max_history = 3  # Keep only the last 3 messages
 
     def send_message(self, user_message, config: AnalysisConfig = None):
         if isinstance(user_message, str):
@@ -20,6 +21,14 @@ class LocalChat:
             self.messages.extend(user_message)
         else:
             raise TypeError("user_message must be str or list[dict]")
+
+        # Keep only the last max_history messages
+        if len(self.messages) > self.max_history:
+            # Always keep the system message
+            system_msg = self.messages[0] if self.messages[0]["role"] == "system" else None
+            self.messages = self.messages[-self.max_history:]
+            if system_msg and system_msg not in self.messages:
+                self.messages.insert(0, system_msg)
 
         if config is None:
             config = AnalysisConfig()
