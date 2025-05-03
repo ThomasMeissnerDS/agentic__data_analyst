@@ -144,15 +144,32 @@ def decide_if_continue_or_not(
     decider_reply = decider_chat.send_message(decider_prompt, config=config).text.strip()
     
     # Parse the decider's response
-    continue_analysis = False
+    continue_analysis = True  # Default to True to avoid early stops
     suggestions = []
     
     lines = decider_reply.split('\n')
+    found_continue = False
+    
     for line in lines:
-        if line.startswith('CONTINUE:'):
-            continue_analysis = 'yes' in line.lower()
+        line = line.strip()
+        if not line:
+            continue
+            
+        # More flexible CONTINUE parsing
+        if line.lower().startswith('continue:'):
+            found_continue = True
+            # Extract the value after CONTINUE:
+            value = line[8:].strip().lower()
+            # Only set to False if explicitly "no"
+            continue_analysis = value != 'no'
+            print(f"Decider CONTINUE parsing: line='{line}', value='{value}', continue_analysis={continue_analysis}")
         elif line.startswith('-'):
             suggestions.append(line[1:].strip())
+    
+    # If no CONTINUE line was found, log a warning but keep continue_analysis as True
+    if not found_continue:
+        print(f"Warning: No CONTINUE line found in decider response. Defaulting to continue_analysis=True")
+        print(f"Full decider response:\n{decider_reply}")
     
     return continue_analysis, decider_reply, suggestions
 
