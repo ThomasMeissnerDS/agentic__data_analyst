@@ -251,6 +251,8 @@ def create_meaningful_summary(
     KEY FINDINGS:
     - [Key finding 1]
     - [Key finding 2]
+
+    Important: Keep your answer concise as we have limited GPU memory to process your answer!\n
     ...
     """
     
@@ -383,7 +385,8 @@ def chat_with_tools(
 
     ONLY USE THE FUNCTIONS THAT ARE LISTED ABOVE. Do not write any code that is not in this list.
     
-    Your analysis should be data-driven and focus on actionable insights. Each iteration should provide new, non-repetitive insights about the data.
+    Your analysis should be data-driven and focus on actionable insights. Each iteration should provide new, non-repetitive insights about the data.\n
+    Keep your answer concise as we have limited GPU memory to process your answer!\n
     """
 
     # Add tool information to the initial message
