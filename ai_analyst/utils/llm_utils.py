@@ -9,6 +9,7 @@ import pandas as pd
 import torch
 import gc
 import time
+import logging
 from accelerate import Accelerator
 from transformers import AutoTokenizer, AutoProcessor, BitsAndBytesConfig, Gemma3ForConditionalGeneration
 from ai_analyst.utils.analysis_toolkit import (
@@ -24,6 +25,7 @@ from ai_analyst.utils.analysis_toolkit import (
     outlier_rows,
     scatter_plot
 )
+import os
 
 # Global cache for tool execution results
 executed_calls_cache = {}
@@ -38,6 +40,16 @@ def gemma3_session(config: AnalysisConfig):
     Args:
         config (AnalysisConfig): Configuration object containing model settings
     """
+    # Set memory management settings
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+        gc.collect()
+        # Enable memory efficient attention
+        torch.backends.cuda.matmul.allow_tf32 = True
+        torch.backends.cudnn.allow_tf32 = True
+        # Set memory allocation strategy
+        os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'expandable_segments:True'
+    
     bnb_cfg = None
     if config.load_4bit:
         bnb_cfg = BitsAndBytesConfig(
@@ -55,6 +67,7 @@ def gemma3_session(config: AnalysisConfig):
         device_map="auto",
         torch_dtype=torch.bfloat16,
         quantization_config=bnb_cfg,
+        attn_implementation="flash_attention_2",  # Use flash attention for better memory efficiency
     )
     model = accelerator.prepare(model)
 
@@ -66,8 +79,9 @@ def gemma3_session(config: AnalysisConfig):
         except Exception:
             pass
         del model, tokenizer, accelerator
-        torch.cuda.empty_cache()
-        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            gc.collect()
 
 
 def decide_if_continue_or_not(
@@ -251,6 +265,8 @@ def create_meaningful_summary(
     KEY FINDINGS:
     - [Key finding 1]
     - [Key finding 2]
+
+    Important: Keep your answer concise as we have limited GPU memory to process your answer!\n
     ...
     """
     
@@ -297,38 +313,14 @@ def chat_with_tools(
     current_summary = ""   # Growing summary of the analysis
     chat = client.chats.create(model=model_id)
 
-    # Create the tool information string that will be included in every message
+    # Set up logging
+    logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger(__name__)
+
+    # Create a minimal tool info string that will be included in every message
     tool_info = f"""
-    You are an Analyst LLM. You have these Python tool functions to assist you:
-    1. correlation("column1_name", "column2_name") - Returns correlation coefficient between two columns
-    2. groupby_aggregate("groupby_column", "agg_column", "agg_func") - Groups data and applies aggregation function
-    3. groupby_aggregate_multi(["groupby_col1", "groupby_col2"], {{"agg_col": "agg_func"}}) - Groups by multiple columns and applies multiple aggregations
-    4. filter_data("column_name", "operator", value) - Returns filtered dataframe based on condition
-    5. boxplot_all_columns() - Creates boxplots for all numeric columns
-    6. correlation_matrix() - Returns correlation matrix for all numeric columns
-    7. scatter_matrix_all_numeric() - Creates scatter plots between all numeric columns
-    8. line_plot_over_time("date_col", "value_col", agg_func="mean", freq="D") - Creates time series plot with aggregation
-    9. outlier_rows("column_name", z_threshold=3.0) - Returns rows identified as outliers based on z-score
-    10. scatter_plot("x_column", "y_column", hue_col="optional_color_column") - Creates a scatter plot between two columns with optional color encoding
-    11. analyze_missing_value_impact("column_name", "target_column") - Analyzes the impact of missing values in a column on regression with target variable
-    12. histogram_plot("column_name", bins=30) - Creates a histogram with KDE for a numeric column
-    13. qq_plot("column_name") - Creates a Q-Q plot to assess normality of a numeric column
-    14. density_plot("column_name") - Creates a density plot for a numeric column
-    15. anova_test("group_column", "value_column") - Performs ANOVA test to compare means across groups
-    16. chi_square_test("categorical_col1", "categorical_col2") - Performs chi-square test of independence between categorical variables
-    17. t_test("numeric_col1", "numeric_col2") - Performs independent t-test between two numeric columns
-    18. seasonal_decomposition("date_col", "value_col", freq="D") - Performs seasonal decomposition of time series data
-    19. autocorrelation_plot("column_name", lags=30) - Creates an autocorrelation plot for time series data
-    20. create_interaction("numeric_col1", "numeric_col2") - Creates an interaction term between two numeric columns
-    21. bin_numeric_column("column_name", bins=5) - Creates bins for a numeric column
-
-    You cannot ask for additional functions. These are the only functions you can use.
-
-    IMPORTANT: All column names must be provided as strings (in quotes). For example:
-    - CORRECT: correlation("Rainfall", "Temperature")
-    - INCORRECT: correlation(Rainfall, Temperature)
-
-    The dataset is already in a global 'df'. The data is about {config.data_about}.
+    You are an Analyst LLM. You have access to data analysis tools.
+    The dataset is already in a global 'df'. The data is about {data_about}.
     Available columns in the dataset: {df.columns.tolist()}
     
     You can call any tool by producing a code block with:
@@ -336,54 +328,8 @@ def chat_with_tools(
     <function_call_here>
     ```
     
-    IMPORTANT: After each tool call, you MUST provide a clear interpretation of the results. Here is a list 
-    of the functions you can use, and an example explanation for each of them:
-    - For correlation_matrix(): Explain the strongest correlations and any interesting patterns
-    - For boxplot_all_columns(): Describe the distribution characteristics and any outliers
-    - For scatter_matrix_all_numeric(): Point out any notable relationships between variables
-    - For line_plot_over_time(): Explain trends, seasonality, or other temporal patterns
-    - For outlier_rows(): Explain the outliers and their significance
-    - For describe_df(): Explain the summary statistics of the data
-    - For groupby_aggregate(): Explain the aggregation results
-    - For groupby_aggregate_multi(): Explain the aggregation results
-    - For filter_data(): Explain the filtered data
-    - For boxplot_all_columns(): Explain the boxplot results
-    - For correlation_matrix(): Explain the correlation matrix results
-    - For scatter_plot(): Explain the scatter plot results
-    - For analyze_missing_value_impact(): Explain how different missing value treatments affect the regression results
-    - For histogram_plot(): Explain the distribution shape, modality, and any skewness
-    - For qq_plot(): Explain the normality of the distribution and any deviations
-    - For density_plot(): Explain the probability density and any peaks or modes
-    - For anova_test(): Explain the significance of group differences and effect size
-    - For chi_square_test(): Explain the relationship between categorical variables
-    - For t_test(): Explain the significance of mean differences between groups
-    - For seasonal_decomposition(): Explain the trend, seasonality, and residual patterns
-    - For autocorrelation_plot(): Explain the temporal dependencies and patterns
-    - For create_interaction(): Explain the new interaction feature created
-    - For bin_numeric_column(): Explain the binning strategy and distribution
-
-    ANALYSIS STRATEGY GUIDELINES:
-    1. Start with functions that give a broad overview of the data
-    2. Use boxplot_all_columns() to identify potential outliers and distribution characteristics
-    3. If you find interesting patterns in the boxplots, investigate specific columns with scatter_plot()
-    4. Use correlation_matrix() sparingly - only when you have a specific hypothesis about relationships
-    5. When using correlation_matrix(), follow up with specific scatter_plot() calls for the most interesting relationships
-    6. Use groupby_aggregate() or groupby_aggregate_multi() to explore categorical relationships
-    7. If you have time-series data, use line_plot_over_time() to identify trends
-    8. Use outlier_rows() to investigate specific columns that show potential anomalies
-    9. Use analyze_missing_value_impact() to understand how missing values affect relationships
-    10. Use histogram_plot(), qq_plot(), and density_plot() to understand the distribution of numeric variables
-    11. Use anova_test() and t_test() to compare means across groups
-    12. Use chi_square_test() to analyze relationships between categorical variables
-    13. For time series data, use seasonal_decomposition() and autocorrelation_plot() to understand patterns
-    14. Use create_interaction() to explore potential interaction effects
-    15. Use bin_numeric_column() to discretize continuous variables when appropriate
-    16. Avoid repetitive analysis - if you've already examined a relationship, move on to new insights
-    17. Each iteration should focus on a different aspect of the data
-
-    ONLY USE THE FUNCTIONS THAT ARE LISTED ABOVE. Do not write any code that is not in this list.
-    
-    Your analysis should be data-driven and focus on actionable insights. Each iteration should provide new, non-repetitive insights about the data.
+    After each tool call, you MUST provide a clear interpretation of the results.
+    Keep your analysis focused and avoid repetitive analysis.
     """
 
     # Add tool information to the initial message
@@ -394,14 +340,26 @@ def chat_with_tools(
     final_answer, iterations = "", 0
 
     while True:
+        # Log memory usage and input length before each iteration
+        if torch.cuda.is_available():
+            memory_allocated = torch.cuda.memory_allocated() / 1024**3
+            memory_reserved = torch.cuda.memory_reserved() / 1024**3
+            logger.info(f"Memory usage before iteration {iterations}:")
+            logger.info(f"Allocated: {memory_allocated:.2f} GB")
+            logger.info(f"Reserved: {memory_reserved:.2f} GB")
+        
         pre, code_block, post = extract_text_and_code(model_text)
+        
+        # Log input length
+        input_length = len(model_text)
+        logger.info(f"Input length for iteration {iterations}: {input_length} tokens")
 
         if pre:
             conversation_log.append(("LLM", pre))
             final_answer += pre + "\n"
-            # Update summary with the new content
+            # Update summary with the new content, keeping it concise
             current_summary = create_meaningful_summary(("LLM", pre), current_summary, client, model_id, config)
-            print(f"Pre-text current_summary (iter {iterations}):", current_summary)
+            logger.info(f"Pre-text current_summary (iter {iterations}): {current_summary[:100]}...")
             
         if code_block:
             tool_out = run_tool_code(code_block, conversation_log, tmp_dir)
@@ -410,19 +368,18 @@ def chat_with_tools(
                 next_msg = f"Tool output:\n{tool_out}\n\n{tool_info}\n\nPlease provide a detailed interpretation of these results. Focus on key insights and patterns."
                 model_text = chat.send_message(next_msg, config=config).text
                 continue
-            # Update summary with the tool call and output
+            # Update summary with the tool call and output, keeping it concise
             current_summary = create_meaningful_summary(("TOOL", model_text), current_summary, client, model_id, config)
-            print(f"Tool call current_summary (iter {iterations}):", current_summary)
+            logger.info(f"Tool call current_summary (iter {iterations}): {current_summary[:100]}...")
             
         if post:
             conversation_log.append(("LLM", post))
             final_answer += post + "\n"
-            # Update summary with the new content
+            # Update summary with the new content, keeping it concise
             current_summary = create_meaningful_summary(("LLM", post), current_summary, client, model_id, config)
-            print(f"Post-text current_summary (iter {iterations}):", current_summary)
+            logger.info(f"Post-text current_summary (iter {iterations}): {current_summary[:100]}...")
 
-        print(f"Conversation log (iter {iterations}):", conversation_log)
-        print(f"Current summary (iter {iterations}):", current_summary)
+        logger.info(f"Conversation log length (iter {iterations}): {len(conversation_log)}")
 
         cont, decider_txt, suggestions = decide_if_continue_or_not(
             latest_text=model_text,
@@ -430,22 +387,28 @@ def chat_with_tools(
             model_id=model_id,
             data_about=data_about,
             df=df,
-            conversation_log=[("LLM", current_summary)],
+            conversation_log=[("LLM", current_summary)],  # Only pass the current summary
             config=config
         )
         conversation_log.append(("DECIDER", decider_txt))
-        # Update summary with the decision
+        # Update summary with the decision, keeping it concise
         current_summary = create_meaningful_summary(("DECIDER", decider_txt + "\n".join([f"- {s}" for s in suggestions])), current_summary, client, model_id, config)
         
-        if not cont and iterations >= config.max_iterations:
-            print(f"Max iterations reached or decision to stop analysis: decision: {cont}, iteration: {iterations}")
+        if not cont or iterations >= config.max_iterations:
+            logger.info(f"Max iterations reached or decision to stop analysis: decision: {cont}, iteration: {iterations}")
             break
         iterations += 1
         time.sleep(sleep_secs)
         
-        # Prepare next message with context and suggestions
-        context = f"Analysis Summary:\n{current_summary}\n\n"
+        # Prepare next message with minimal context
+        context = f"Analysis Summary (last {min(3, len(conversation_log))} steps):\n{current_summary}\n\n"
         next_msg = f"{context}Previous suggestions:\n" + "\n\n" + tool_info
+        
+        # Clear memory before next iteration
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            gc.collect()
+            
         model_text = chat.send_message(next_msg, config=config).text
 
     save_conversation_to_pdf(conversation_log, pdf_path, config)
