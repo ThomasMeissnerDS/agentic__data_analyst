@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "ai_analyst"
-version = "0.3.2"
+version = "0.3.3"
 description = "A data analysis project using multiple LLMs"
 authors = ["Thomas Meißner <meissnercorporation@gmx.de>"]
 license = "GPL-3.0-only"
@@ -37,4 +37,11 @@ transformers = ">=4.51.3"
 requires = [
     "poetry-core>=1.0.0", 
     "poetry-dynamic-versioning",
-    ]
+]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry-dynamic-versioning]
+enable = true
+vcs = "git"
+style = "semver"
+pattern = "^(?P<base>\\d+\\.\\d+\\.\\d+)$"

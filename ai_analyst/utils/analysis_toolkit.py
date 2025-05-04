@@ -14,14 +14,38 @@ from scipy.stats import probplot
 
 def correlation(c1: str, c2: str):   
     global df
+    # Check if columns are numeric
+    if not (pd.api.types.is_numeric_dtype(df[c1]) and pd.api.types.is_numeric_dtype(df[c2])):
+        return f"Error: Both columns must be numeric. {c1} and {c2} types are {df[c1].dtype} and {df[c2].dtype}"
     return df[c1].corr(df[c2])
 
 def describe_df(columns: list = None, stats: list = None):
     global df
-    desc = df[columns].describe() if columns else df.describe()
-    if stats:
-        desc = desc.loc[[s for s in stats if s in desc.index]]
-    return desc.to_dict()
+    # If no columns specified, use all columns
+    if columns is None:
+        columns = df.columns.tolist()
+    
+    # Separate numeric and non-numeric columns
+    numeric_cols = df[columns].select_dtypes(include=['int64', 'float64']).columns
+    non_numeric_cols = df[columns].select_dtypes(exclude=['int64', 'float64']).columns
+    
+    result = {}
+    
+    # Handle numeric columns
+    if len(numeric_cols) > 0:
+        numeric_desc = df[numeric_cols].describe()
+        if stats:
+            numeric_desc = numeric_desc.loc[[s for s in stats if s in numeric_desc.index]]
+        result.update(numeric_desc.to_dict())
+    
+    # Handle non-numeric columns
+    if len(non_numeric_cols) > 0:
+        non_numeric_desc = df[non_numeric_cols].describe(include=['object'])
+        if stats:
+            non_numeric_desc = non_numeric_desc.loc[[s for s in stats if s in non_numeric_desc.index]]
+        result.update(non_numeric_desc.to_dict())
+    
+    return result
 
 def groupby_aggregate(groupby_col: str, agg_col: str, agg_func: str):
     global df
@@ -64,8 +88,13 @@ def filter_data(col: str, op: str, value):
 
 def boxplot_all_columns():
     global df
+    # Select only numeric columns
+    numeric_df = df.select_dtypes(include=['int64', 'float64'])
+    if len(numeric_df.columns) == 0:
+        return "No numeric columns found in the dataset"
+        
     fig, ax = plt.subplots(figsize=(12, 6))
-    df.boxplot(ax=ax)
+    numeric_df.boxplot(ax=ax)
     plt.xticks(rotation=90)
     plt.tight_layout()
     buf = io.BytesIO()
@@ -76,8 +105,13 @@ def boxplot_all_columns():
 
 def correlation_matrix():               
     global df
+    # Select only numeric columns
+    numeric_df = df.select_dtypes(include=['int64', 'float64'])
+    if len(numeric_df.columns) == 0:
+        return "No numeric columns found in the dataset"
+        
     fig, ax = plt.subplots(figsize=(10, 8))
-    sns.heatmap(df.corr(), annot=True, cmap='coolwarm', center=0, ax=ax)
+    sns.heatmap(numeric_df.corr(), annot=True, cmap='coolwarm', center=0, ax=ax)
     plt.tight_layout()
     buf = io.BytesIO()
     fig.savefig(buf, format="png")
